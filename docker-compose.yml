@@ -107,6 +107,24 @@ services:
     networks:
       - staging
 
+  # ===================================
+  # WEBAPP
+  # ===================================
+  streamlit:
+    container_name: streamlit-webapp
+    build:
+      context: ./docker/streamlit
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src/streamlit:/app
+    depends_on:
+      - graph-db
+    networks:
+      - production
+
+
 networks:
   ingestion:
   staging:
