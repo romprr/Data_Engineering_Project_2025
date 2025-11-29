@@ -1,2 +1,6 @@
 *__pycache__/
-myenv/
+env/
+.env
+data/
+metadata/
+*.DS_Store
