@@ -8,19 +8,31 @@ Students: **[To be assigned]**
 
 ### Abstract
 
-## Datasets Description 
+## Datasets Description
 
-## Queries 
+## Queries
 
 ## Requirements
 
 ## Note for Students
 
-* Clone the created repository offline;
-* Add your name and surname into the Readme file and your teammates as collaborators
-* Complete the field above after project is approved
-* Make any changes to your repository according to the specific assignment;
-* Ensure code reproducibility and instructions on how to replicate the results;
-* Add an open-source license, e.g., Apache 2.0;
-* README is automatically converted into pdf
+- Clone the created repository offline;
+- Add your name and surname into the Readme file and your teammates as collaborators
+- Complete the field above after project is approved
+- Make any changes to your repository according to the specific assignment;
+- Ensure code reproducibility and instructions on how to replicate the results;
+- Add an open-source license, e.g., Apache 2.0;
+- README is automatically converted into pdf
 
+## CONNECTION TO INSIGHTS
+
+### Postgres
+
+- Put the credentials
+- Create a new connection using the database information
+- Query the stock database
+
+### Mongo
+
+- Open the container's command line
+- Run the following command with the rigth credentials (mongosh "mongodb://USERNAME:PASSWORD@localhost:PORT/DB_NAME?authSource=DATABASE_NAME_FOR_AUTH")
