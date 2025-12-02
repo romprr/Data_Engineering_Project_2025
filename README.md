@@ -35,4 +35,10 @@ Students: **[To be assigned]**
 ### Mongo
 
 - Open the container's command line
-- Run the following command with the rigth credentials (mongosh "mongodb://USERNAME:PASSWORD@localhost:PORT/DB_NAME?authSource=DATABASE_NAME_FOR_AUTH")
+- Run the following command with the right credentials (mongosh "mongodb://USERNAME:PASSWORD@localhost:PORT/DB_NAME?authSource=DATABASE_NAME_FOR_AUTH")
+
+### Redis
+
+- Opent the container's command line
+- Run the follow command with the right credentials (redis-cli --user username --pass password)
+- RPUSH and RPOP on different queues to manage the data
