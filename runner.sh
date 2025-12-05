@@ -29,4 +29,13 @@ case $arg in
         echo "Checking the status of the containers..."
         docker compose -f docker-compose.airflow.yml -f docker-compose.yml ps
         ;;
+    full_restart)
+        echo "Performing a full restart of the containers..."
+        docker compose -f docker-compose.airflow.yml -f docker-compose.yml down --volumes --remove-orphans
+        rm -rf data
+        rm -rf logs
+        rm -rf metadata
+        docker compose -f docker-compose.airflow.yml -f docker-compose.yml up -d
+        echo "Full restart completed."
+        ;;
 esac

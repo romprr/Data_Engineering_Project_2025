@@ -8,3 +8,5 @@ the last pipeline runs a bash task that will start the streamlit server
 
 - security for all the init files
 - set up neon4j
+- creation of 3 dags
+- conception for the dags before coding them
