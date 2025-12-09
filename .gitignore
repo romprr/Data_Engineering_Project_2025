@@ -3,3 +3,5 @@
 data/
 metadata/
 *.DS_Store
+tester/
+TODO.md

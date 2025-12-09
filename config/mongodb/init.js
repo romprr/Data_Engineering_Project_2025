@@ -1,10 +1,25 @@
-// db = connect("localhost:27017");s
+// Variables
+const dbName = "stocks";
+
 // Creation of the db
-db = db.getSiblingDB("stocks");
+db = db.getSiblingDB(dbName);
 
-// Create collections TODO what collections are needed?
-db.createCollection("Country")
+db.createCollection("stock_prices")
+db.createCollection("companies_info")
+db.createCollection("stock_transactions")
+db.createCollection("crypto_prices")
+db.createCollection("crypto_transactions")
+db.createCollection("political_events")
+db.createCollection("politicians")
+db.createCollection("politicians_market_transactions")
 
 
-console.log("Database and collections created successfully.");
-console.log("Waiting for further data population...");
+// Creation of CRUD user in the stocks database
+// TODO check env variables for user and password
+db.createUser({
+  user: "crud",
+  pwd: "crud",
+  roles: [
+    { role: "readWrite", db: dbName }
+  ]
+});
