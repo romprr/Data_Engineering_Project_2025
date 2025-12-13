@@ -18,78 +18,117 @@ yf.set_tz_cache_location("/tmp/yfinance_cache")
 logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 
 # Constants 
-WIKIPEDIA_SP500_URL = os.getenv("WIKIPEDIA_SP500_URL")
-COINMARKETCAP_LIST_CRYPTO_SYMBOLS_URL = os.getenv("COINMARKETCAP_LIST_CRYPTO_SYMBOLS_URL")
-INGESTION_STOCKS_TRANSACTIONS_TEMP_FILE=os.getenv("INGESTION_STOCKS_TRANSACTIONS_TEMP_FILE")
-INGESTION_COMPANIES_TEMP_FILE=os.getenv("INGESTION_COMPANIES_TEMP_FILE")
-INGESTION_STOCK_PRICES_TEMP_FILE=os.getenv("INGESTION_STOCK_PRICES_TEMP_FILE")
-INGESTION_CRYPTO_PRICES_TEMP_FILE=os.getenv("INGESTION_CRYPTO_PRICES_TEMP_FILE")
-INGESTION_CRYPTO_INFO_TEMP_FILE=os.getenv("INGESTION_CRYPTO_INFO_TEMP_FILE")
-INGESTION_EVENTS_TEMP_FILE=os.getenv("INGESTION_EVENTS_TEMP_FILE")
-INGESTION_POLITICIANS_TEMP_FILE=os.getenv("INGESTION_POLITICIANS_TEMP_FILE")
-COIN_API_TOKEN=os.getenv("COIN_API_TOKEN")
-COIN_API_BASE_URL=os.getenv("COIN_API_BASE_URL")
-UCDP_POLITICAL_EVENTS_CSV_FILE_URL=os.getenv("UCDP_POLITICAL_EVENTS_CSV_FILE_URL")
+INGESTION_FUTURES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_FUTURES_INFORMATION_TEMP_FILE")
+INGESTION_FUTURES_VALUES_TEMP_FILE=os.getenv("INGESTION_FUTURES_VALUES_TEMP_FILE")
+INGESTION_INDICES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_INDICES_INFORMATION_TEMP_FILE")
+INGESTION_INDICES_VALUES_TEMP_FILE=os.getenv("INGESTION_INDICES_VALUES_TEMP_FILE")
+INGESTION_CURRENCIES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_CURRENCIES_INFORMATION_TEMP_FILE")
+INGESTION_CURRENCIES_VALUES_TEMP_FILE=os.getenv("INGESTION_CURRENCIES_VALUES_TEMP_FILE")
+INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FILE")
+INGESTION_CRYPTOCURRENCIES_PRICES_TEMP_FILE=os.getenv("INGESTION_CRYPTOCURRENCIES_PRICES_TEMP_FILE")
+INGESTION_WORLWIDE_EVENTS_TEMP_FILE=os.getenv("INGESTION_WORLWIDE_EVENTS_TEMP_FILE")
+WORLD_INDICES_SYMBOLS_SCRAPER_URL=os.getenv("WORLD_INDICES_SYMBOLS_SCRAPER_URL")
+FUTURES_SYMBOLS_SCRAPER_URL=os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
+CURRENCIES_SYMBOLS_SCRAPER_URL=os.getenv("CURRENCIES_SYMBOLS_SCRAPER_URL")
+
+WORLDWIDE_EVENTS_CSV_FILE_URL=os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
 DOWNLOADS_PATH=os.getenv("DOWNLOADS_PATH")
 
 # ==========================
 # PYTHON FUNCTIONS
 # ==========================
-# STOCKS
-def extract_companies_symbols():
-    """Get company symbols from Wikipedia"""
-    print("Getting the companies symbols")
+# INDICES
+def extract_indices_symbols():
+    """Get indices symbols from Wikipedia"""
+    print("Getting the indices symbols")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    df = pd.read_html(WIKIPEDIA_SP500_URL, storage_options=headers)[0] # First table on the page
-    symbols = df['Symbol'].tolist()
-    print("Finished getting the companies symbols")
-    print(symbols)
+    df = pd.read_html(WORLD_INDICES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
+    symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
+    print("Finished getting the indices symbols")
+    print("Indices symbols:", symbols)
     return symbols
 
-def extract_stock_prices(file_path, **context): 
-    """Get stock prices for given company symbols using yfinance"""
-    print("Extracting stock prices in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_companies_symbols')
+def extract_indices_values(file_path, **context): 
+    """Get indices values using yfinance"""
+    print("Extracting indices values in file:", file_path)
+    symbols = context['ti'].xcom_pull(task_ids='get_indices_symbols')
     for symbol in symbols:
-        stock_prices = {}
-        print("GETTING PRICE FOR SYMBOL:", symbol)
+        indices_values = {}
+        print("GETTING VALUE FOR SYMBOL:", symbol)
         ticker = yf.Ticker(symbol)
         hist = ticker.history(period=f"{12 * 20}mo", interval="1wk")
         if not hist.empty:
             hist = hist.reset_index()
             data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-            stock_prices[symbol] = data
+            indices_values[symbol] = data
         else:
-            stock_prices[symbol] = None
-        write_to_file(stock_prices, file_path) # writing after each symbol to avoid data loss
+            indices_values[symbol] = None
+        write_to_file(indices_values, file_path) # writing after each symbol to avoid data loss
         time.sleep(2.0)  # staggered timing to avoid parallel request collision
-    print("Finished extracting stock prices in file:", file_path)
+    print("Finished extracting indices values in file:", file_path)
 
-def extract_companies_info(file_path, **context):
-    """Get company information for given symbols using yfinance"""
-    print("getting the companies information")
-    symbols = context['ti'].xcom_pull(task_ids='get_companies_symbols')
+def extract_indices_info(file_path, **context): 
+    """Get indices information using yfinance"""
+    print("Extracting indices information in file:", file_path)
+    symbols = context['ti'].xcom_pull(task_ids='get_indices_symbols')
     for symbol in symbols:
-        companies_info = {}
+        indices_info = {}
         print("GETTING INFO FOR SYMBOL:", symbol)
         ticker = yf.Ticker(symbol)
         info = ticker.info
-        companies_info[symbol] = info
+        indices_info[symbol] = info
         time.sleep(2.0)  # staggered timing to avoid parallel request collision
-        write_to_file(companies_info, file_path) 
-    print("finished getting the companies information")
+        write_to_file(indices_info, file_path)
+    print("Finished extracting indices information in file:", file_path)
 
-# CRYPTOCURRENCIES
-def extract_crypto_symbols(): 
-    """Get cryptocurrency symbols"""
-    print("Getting the cryptocurrency symbols")
+def extract_forex_symbols():
+    """Get forex symbols from Wikipedia"""
+    print("Getting the forex symbols")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    df = pd.read_html("https://bitcoinwiki.org/wiki/cryptocurrency-list", storage_options=headers)[0] # First table on the page
-    symbols = [symbols + "-USD" for symbols in df['Symbol'].tolist()]
-    print("Finished getting the cryptocurrency symbols")
+    df = pd.read_html(CURRENCIES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
+    symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
+    print("Finished getting the forex symbols")
+    print("Forex symbols:", symbols)
     return symbols
 
-def extract_crypto_prices(file_path, **context): 
+def extract_forex_values(file_path, **context):
+    """Get forex values using yfinance"""
+    print("Extracting forex values in file:", file_path)
+    symbols = context['ti'].xcom_pull(task_ids='get_forex_symbols')
+    for symbol in symbols:
+        forex_values = {}
+        print("GETTING VALUE FOR SYMBOL:", symbol)
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=f"{12 * 20}mo", interval="1wk")
+        if not hist.empty:
+            hist = hist.reset_index()
+            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
+            forex_values[symbol] = data
+        else:
+            forex_values[symbol] = None
+        write_to_file(forex_values, file_path) # writing after each symbol to avoid data loss
+        time.sleep(2.0)  # staggered timing to avoid parallel request collision
+    print("Finished extracting forex values in file:", file_path)
+
+def extract_forex_info(file_path, **context):
+    """Get forex information using yfinance"""
+    print("Extracting forex information in file:", file_path)
+    symbols = context['ti'].xcom_pull(task_ids='get_forex_symbols')
+    for symbol in symbols:
+        forex_info = {}
+        print("GETTING INFO FOR SYMBOL:", symbol)
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        forex_info[symbol] = info
+        time.sleep(2.0)  # staggered timing to avoid parallel request collision
+        write_to_file(forex_info, file_path)
+    print("Finished extracting forex information in file:", file_path)
+
+def extract_crypto_symbols(): 
+    """Get cryptocurrency symbols"""
+    return ["BTC-USD", "ETH-USD"]
+
+def extract_crypto_prices(file_path, **context):
     """Get cryptocurrency prices using binance API"""
     crypto_symbols = context['ti'].xcom_pull(task_ids='get_crypto_symbols')
     for symbol in crypto_symbols:
@@ -107,7 +146,7 @@ def extract_crypto_prices(file_path, **context):
         time.sleep(2.0)  # staggered timing to avoid parallel request collision
     print("Finished extracting cryptocurrency prices in file:", file_path)
 
-def extract_crypto_info(file_path, **context): 
+def extract_crypto_info(file_path, **context):
     """Get cryptocurrency information using yfinance"""
     crypto_symbols = context['ti'].xcom_pull(task_ids='get_crypto_symbols')
     for symbol in crypto_symbols:
@@ -120,14 +159,48 @@ def extract_crypto_info(file_path, **context):
         write_to_file(crypto_info, file_path)
     print("Finished extracting cryptocurrency information in file:", file_path)
 
-# POLITICS
-def extract_political_events(file_path):
-    """Get political events from UCDP API"""
-    print("Extracting political events in file:", file_path)
-    political_events = query_api("https://ucdpapi.example.com/political_events")  # Placeholder URL
-    for event in political_events:
-        write_to_file(event, file_path)
-    print("Finished extracting political events in file:", file_path)
+def extract_futures_symbols():
+    """Get futures symbols from Wikipedia"""
+    print("Getting the futures symbols")
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    df = pd.read_html(FUTURES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
+    symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
+    print("Finished getting the futures symbols")
+    print("Futures symbols:", symbols)
+    return symbols
+
+def extract_futures_values(file_path, **context):
+    """Get futures values using yfinance"""
+    print("Extracting futures values in file:", file_path)
+    symbols = context['ti'].xcom_pull(task_ids='get_futures_symbols')
+    for symbol in symbols:
+        futures_values = {}
+        print("GETTING VALUE FOR SYMBOL:", symbol)
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=f"{12 * 20}mo", interval="1wk")
+        if not hist.empty:
+            hist = hist.reset_index()
+            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
+            futures_values[symbol] = data
+        else:
+            futures_values[symbol] = None
+        write_to_file(futures_values, file_path) # writing after each symbol to avoid data loss
+        time.sleep(2.0)  # staggered timing to avoid parallel request collision
+    print("Finished extracting futures values in file:", file_path)
+
+def extract_futures_info(file_path, **context):
+    """Get futures information using yfinance"""
+    print("Extracting futures information in file:", file_path)
+    symbols = context['ti'].xcom_pull(task_ids='get_futures_symbols')
+    for symbol in symbols:
+        futures_info = {}
+        print("GETTING INFO FOR SYMBOL:", symbol)
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        futures_info[symbol] = info
+        time.sleep(2.0)  # staggered timing to avoid parallel request collision
+        write_to_file(futures_info, file_path)
+    print("Finished extracting futures information in file:", file_path)
 
 default_args = {
     "owner": "niceJobTeam",
@@ -150,13 +223,15 @@ with DAG(
     init_env = BashOperator(
         task_id="init_env", 
         bash_command=f'''
-        truncate -s 0 {INGESTION_STOCKS_TRANSACTIONS_TEMP_FILE} && \
-        truncate -s 0 {INGESTION_COMPANIES_TEMP_FILE} && \
-        truncate -s 0 {INGESTION_STOCK_PRICES_TEMP_FILE} && \
-        truncate -s 0 {INGESTION_CRYPTO_PRICES_TEMP_FILE} && \
-        truncate -s 0 {INGESTION_CRYPTO_INFO_TEMP_FILE} && \
-        truncate -s 0 {INGESTION_EVENTS_TEMP_FILE} && \
-        truncate -s 0 {INGESTION_POLITICIANS_TEMP_FILE} 
+        truncate -s 0 {INGESTION_FUTURES_INFORMATION_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_FUTURES_VALUES_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_INDICES_INFORMATION_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_INDICES_VALUES_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_CURRENCIES_INFORMATION_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_CURRENCIES_VALUES_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_CRYPTOCURRENCIES_PRICES_TEMP_FILE} && \
+        truncate -s 0 {INGESTION_WORLWIDE_EVENTS_TEMP_FILE}
         '''
     )
     end = EmptyOperator(task_id="end")
@@ -164,24 +239,45 @@ with DAG(
     # ==========================
     # Extraction tasks
     # ==========================
-    # STOCKS
-    get_companies_symbols = PythonOperator(
-        task_id="get_companies_symbols",
-        python_callable=extract_companies_symbols,
+    # INDICES
+    get_indices_symbols = PythonOperator(
+        task_id="get_indices_symbols",
+        python_callable=extract_indices_symbols,
         do_xcom_push=True # push the result to XCom
     )
 
-    get_stock_prices = PythonOperator( 
-        task_id="get_stock_prices",
-        python_callable=extract_stock_prices,
-        op_kwargs={"file_path": INGESTION_STOCK_PRICES_TEMP_FILE},
+    get_indices_values = PythonOperator( 
+        task_id="get_indices_values",
+        python_callable=extract_indices_values,
+        op_kwargs={"file_path": INGESTION_INDICES_VALUES_TEMP_FILE},
         do_xcom_push=False
     )
 
-    get_companies_info = PythonOperator( 
-        task_id="get_companies_info",
-        python_callable=extract_companies_info,
-        op_kwargs={"file_path": INGESTION_COMPANIES_TEMP_FILE},
+    get_indices_info = PythonOperator( 
+        task_id="get_indices_info",
+        python_callable=extract_indices_info,
+        op_kwargs={"file_path": INGESTION_INDICES_INFORMATION_TEMP_FILE},
+        do_xcom_push=False
+    )
+
+    # FOREX
+    get_forex_symbols = PythonOperator(
+        task_id="get_forex_symbols",
+        python_callable=extract_forex_symbols,
+        do_xcom_push=True # push the result to XCom
+    )
+
+    get_forex_values = PythonOperator(
+        task_id="get_forex_values",
+        python_callable=extract_forex_values,
+        op_kwargs={"file_path": INGESTION_CURRENCIES_VALUES_TEMP_FILE},
+        do_xcom_push=False
+    )
+
+    get_forex_info = PythonOperator(
+        task_id="get_forex_info",
+        python_callable=extract_forex_info,
+        op_kwargs={"file_path": INGESTION_CURRENCIES_INFORMATION_TEMP_FILE},
         do_xcom_push=False
     )
 
@@ -189,34 +285,43 @@ with DAG(
     get_crypto_symbols = PythonOperator(
         task_id="get_crypto_symbols",
         python_callable=extract_crypto_symbols,
-        do_xcom_push=True
+        do_xcom_push=True # push the result to XCom
+    )
+    get_crypto_prices = PythonOperator(
+        task_id="get_crypto_prices",
+        python_callable=extract_crypto_prices,
+        op_kwargs={"file_path": INGESTION_CRYPTOCURRENCIES_PRICES_TEMP_FILE},
+        do_xcom_push=False
+    )
+    get_crypto_info = PythonOperator(
+        task_id="get_crypto_info",
+        python_callable=extract_crypto_info,
+        op_kwargs={"file_path": INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FILE},
+        do_xcom_push=False
     )
 
-    # get_crypto_prices = PythonOperator(
-    #     task_id="get_crypto_prices",
-    #     python_callable=extract_crypto_prices,
-    #     op_kwargs={"file_path": INGESTION_CRYPTO_PRICES_TEMP_FILE},
-    #     do_xcom_push=False
-    # )
-    
-    # get_crypto_info = PythonOperator(
-    #     task_id="get_crypto_info",
-    #     python_callable=extract_crypto_info,
-    #     op_kwargs={"file_path": INGESTION_CRYPTO_INFO_TEMP_FILE},
-    #     do_xcom_push=False
-    # )
-
-    # POLITICS
-    get_political_events_file = BashOperator(
-        task_id="get_political_events_file",
-        bash_command=f'''
-        curl -o {DOWNLOADS_PATH}/political_events.zip {UCDP_POLITICAL_EVENTS_CSV_FILE_URL} && \ 
-        unzip -o {DOWNLOADS_PATH}/political_events.zip -d {DOWNLOADS_PATH} && \ 
-        rm {DOWNLOADS_PATH}/political_events.zip
-        '''
+    # FUTURES
+    get_futures_symbols = PythonOperator(
+        task_id="get_futures_symbols",
+        python_callable=extract_futures_symbols,
+        do_xcom_push=True # push the result to XCom
     )
 
-    get_politicians_info # TODO
+    get_futures_values = PythonOperator(
+        task_id="get_futures_values",
+        python_callable=extract_futures_values,
+        op_kwargs={"file_path": INGESTION_FUTURES_VALUES_TEMP_FILE},
+        do_xcom_push=False
+    )
+
+    get_futures_info = PythonOperator(
+        task_id="get_futures_info",
+        python_callable=extract_futures_info,
+        op_kwargs={"file_path": INGESTION_FUTURES_INFORMATION_TEMP_FILE},
+        do_xcom_push=False
+    )  
+
+
     
     # ==========================
     # TASK DEPENDENCIES
@@ -236,11 +341,13 @@ with DAG(
     #  insert_crypto_prices_to_db, insert_crypto_info_to_db, insert_crypto_transactions_to_db,
     #  insert_political_events_to_db, insert_politicians_info_to_db] >> end
 
-    init_env >> [get_companies_symbols, get_crypto_symbols] 
-    get_companies_symbols >> [get_stock_prices, get_companies_info]
+    init_env >> [get_indices_symbols, get_forex_symbols, get_crypto_symbols, get_futures_symbols] 
+    get_indices_symbols >> [get_indices_values, get_indices_info]
+    get_forex_symbols >> [get_forex_values, get_forex_info]
+    get_crypto_symbols >> [get_crypto_prices, get_crypto_info]
+    get_futures_symbols >> [get_futures_values, get_futures_info]
     # get_crypto_symbols >> [get_crypto_prices, get_crypto_info]
 
-    get_political_events_file
 
 
     
