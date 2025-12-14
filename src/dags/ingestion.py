@@ -1,15 +1,10 @@
 from datetime import datetime, timedelta
 
-from airflow import DAG
-from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import PythonOperator
 from airflow.decorators import dag, task
-from utils.file import write as write_to_file
 import yfinance as yf
 import pandas as pd
-import time
+from pymongo import MongoClient
 import os
-from utils.file import write as write_to_file
 import logging
 import json
 
@@ -21,187 +16,17 @@ INGESTION_FUTURES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_FUTURES_INFORMATION
 INGESTION_FUTURES_VALUES_TEMP_FILE=os.getenv("INGESTION_FUTURES_VALUES_TEMP_FILE")
 INGESTION_INDICES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_INDICES_INFORMATION_TEMP_FILE")
 INGESTION_INDICES_VALUES_TEMP_FILE=os.getenv("INGESTION_INDICES_VALUES_TEMP_FILE")
-INGESTION_CURRENCIES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_CURRENCIES_INFORMATION_TEMP_FILE")
-INGESTION_CURRENCIES_VALUES_TEMP_FILE=os.getenv("INGESTION_CURRENCIES_VALUES_TEMP_FILE")
-INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FILE=os.getenv("INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FILE")
-INGESTION_CRYPTOCURRENCIES_PRICES_TEMP_FILE=os.getenv("INGESTION_CRYPTOCURRENCIES_PRICES_TEMP_FILE")
+INGESTION_FOREX_INFORMATION_TEMP_FILE=os.getenv("INGESTION_FOREX_INFORMATION_TEMP_FILE")
+INGESTION_FOREX_VALUES_TEMP_FILE=os.getenv("INGESTION_FOREX_VALUES_TEMP_FILE")
+INGESTION_CRYPTOFOREX_INFORMATION_TEMP_FILE=os.getenv("INGESTION_CRYPTOFOREX_INFORMATION_TEMP_FILE")
+INGESTION_CRYPTOFOREX_PRICES_TEMP_FILE=os.getenv("INGESTION_CRYPTOFOREX_PRICES_TEMP_FILE")
 INGESTION_WORLWIDE_EVENTS_TEMP_FILE=os.getenv("INGESTION_WORLWIDE_EVENTS_TEMP_FILE")
 WORLD_INDICES_SYMBOLS_SCRAPER_URL=os.getenv("WORLD_INDICES_SYMBOLS_SCRAPER_URL")
 FUTURES_SYMBOLS_SCRAPER_URL=os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
-CURRENCIES_SYMBOLS_SCRAPER_URL=os.getenv("CURRENCIES_SYMBOLS_SCRAPER_URL")
+FOREX_SYMBOLS_SCRAPER_URL=os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 
 WORLDWIDE_EVENTS_CSV_FILE_URL=os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
 DOWNLOADS_PATH=os.getenv("DOWNLOADS_PATH")
-
-# ==========================
-# PYTHON FUNCTIONS
-# ==========================
-# INDICES
-def extract_indices_symbols():
-    """Get indices symbols from Wikipedia"""
-    print("Getting the indices symbols")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    df = pd.read_html(WORLD_INDICES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
-    symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
-    print("Finished getting the indices symbols")
-    print("Indices symbols:", symbols)
-    return symbols
-
-def extract_indices_values(file_path, **context): 
-    """Get indices values using yfinance"""
-    print("Extracting indices values in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_indices_symbols')
-    for symbol in symbols:
-        indices_values = {}
-        print("GETTING VALUE FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f"{12 * 20}mo", interval="1wk")
-        if not hist.empty:
-            hist = hist.reset_index()
-            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-            indices_values[symbol] = data
-        else:
-            indices_values[symbol] = None
-        write_to_file(indices_values, file_path) # writing after each symbol to avoid data loss
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-    print("Finished extracting indices values in file:", file_path)
-
-def extract_indices_info(file_path, **context): 
-    """Get indices information using yfinance"""
-    print("Extracting indices information in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_indices_symbols')
-    for symbol in symbols:
-        indices_info = {}
-        print("GETTING INFO FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        indices_info[symbol] = info
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-        write_to_file(indices_info, file_path)
-    print("Finished extracting indices information in file:", file_path)
-
-def extract_forex_symbols():
-    """Get forex symbols from Wikipedia"""
-    print("Getting the forex symbols")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    df = pd.read_html(CURRENCIES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
-    symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
-    print("Finished getting the forex symbols")
-    print("Forex symbols:", symbols)
-    return symbols
-
-def extract_forex_values(file_path, **context):
-    """Get forex values using yfinance"""
-    print("Extracting forex values in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_forex_symbols')
-    for symbol in symbols:
-        forex_values = {}
-        print("GETTING VALUE FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f"{12 * 20}mo", interval="1wk")
-        if not hist.empty:
-            hist = hist.reset_index()
-            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-            forex_values[symbol] = data
-        else:
-            forex_values[symbol] = None
-        write_to_file(forex_values, file_path) # writing after each symbol to avoid data loss
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-    print("Finished extracting forex values in file:", file_path)
-
-def extract_forex_info(file_path, **context):
-    """Get forex information using yfinance"""
-    print("Extracting forex information in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_forex_symbols')
-    for symbol in symbols:
-        forex_info = {}
-        print("GETTING INFO FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        forex_info[symbol] = info
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-        write_to_file(forex_info, file_path)
-    print("Finished extracting forex information in file:", file_path)
-
-def extract_crypto_symbols(): 
-    """Get cryptocurrency symbols"""
-    return ["BTC-USD", "ETH-USD"]
-
-def extract_crypto_prices(file_path, **context):
-    """Get cryptocurrency prices using binance API"""
-    crypto_symbols = context['ti'].xcom_pull(task_ids='get_crypto_symbols')
-    for symbol in crypto_symbols:
-        crypto_data = {}
-        print("GETTING PRICE FOR SYMBOL:", symbol)      
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f"{12 * 20}mo", interval="1wk") 
-        if not hist.empty:
-            hist = hist.reset_index()
-            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-            crypto_data[symbol] = data
-        else:
-            crypto_data[symbol] = None
-        write_to_file(crypto_data, file_path)
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-    print("Finished extracting cryptocurrency prices in file:", file_path)
-
-def extract_crypto_info(file_path, **context):
-    """Get cryptocurrency information using yfinance"""
-    crypto_symbols = context['ti'].xcom_pull(task_ids='get_crypto_symbols')
-    for symbol in crypto_symbols:
-        crypto_info = {}
-        print("GETTING INFO FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        crypto_info[symbol] = info
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-        write_to_file(crypto_info, file_path)
-    print("Finished extracting cryptocurrency information in file:", file_path)
-
-def extract_futures_symbols():
-    """Get futures symbols from Wikipedia"""
-    print("Getting the futures symbols")
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    df = pd.read_html(FUTURES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
-    symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
-    print("Finished getting the futures symbols")
-    print("Futures symbols:", symbols)
-    return symbols
-
-def extract_futures_values(file_path, **context):
-    """Get futures values using yfinance"""
-    print("Extracting futures values in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_futures_symbols')
-    for symbol in symbols:
-        futures_values = {}
-        print("GETTING VALUE FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f"{12 * 20}mo", interval="1wk")
-        if not hist.empty:
-            hist = hist.reset_index()
-            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-            futures_values[symbol] = data
-        else:
-            futures_values[symbol] = None
-        write_to_file(futures_values, file_path) # writing after each symbol to avoid data loss
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-    print("Finished extracting futures values in file:", file_path)
-
-def extract_futures_info(file_path, **context):
-    """Get futures information using yfinance"""
-    print("Extracting futures information in file:", file_path)
-    symbols = context['ti'].xcom_pull(task_ids='get_futures_symbols')
-    for symbol in symbols:
-        futures_info = {}
-        print("GETTING INFO FOR SYMBOL:", symbol)
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        futures_info[symbol] = info
-        time.sleep(2.0)  # staggered timing to avoid parallel request collision
-        write_to_file(futures_info, file_path)
-    print("Finished extracting futures information in file:", file_path)
-
-
 
 default_args = {
     "owner": "niceJobTeam",
@@ -222,7 +47,16 @@ default_args = {
     )
 def ingestion_pipeline():
     """Ingestion DAG to extract data from various sources and load into MongoDB"""
-
+    MONGO_DB_RAW_DATA_COLLECTION_FUTURES_INFORMATION=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_FUTURES_INFORMATION")
+    MONGO_DB_RAW_DATA_COLLECTION_FUTURES_VALUES=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_FUTURES_VALUES")
+    MONGO_DB_RAW_DATA_COLLECTION_INDICES_INFORMATION=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_INDICES_INFORMATION")
+    MONGO_DB_RAW_DATA_COLLECTION_INDICES_VALUES=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_INDICES_VALUES")
+    MONGO_DB_RAW_DATA_COLLECTION_FOREX_INFORMATION=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_FOREX_INFORMATION")
+    MONGO_DB_RAW_DATA_COLLECTION_FOREX_VALUES=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_FOREX_VALUES")
+    MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_INFORMATION=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_INFORMATION")
+    MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES")
+    MONGO_DB_RAW_DATA_COLLECTION_WORLWIDE_EVENTS=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_WORLWIDE_EVENTS")
+    MONGO_DB_URI=os.getenv("MONGO_DB_URI")
     @task 
     def init_env():
         """Initialize environment"""
@@ -230,11 +64,15 @@ def ingestion_pipeline():
         print("Environment initialized.")
 
     @task
-    def chunk_symbols(symbols, chunk_size=5):
+    def chunk(symbols, chunk_size=7):
         return [
             symbols[i : i + chunk_size]
             for i in range(0, len(symbols), chunk_size)
         ]
+    
+    @task
+    def end():
+        print("Ingestion pipeline completed successfully.")
 
     @task
     def get_crypto_symbols():
@@ -246,7 +84,7 @@ def ingestion_pipeline():
         """Get forex symbols from Wikipedia"""
         print("Getting the forex symbols")
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        df = pd.read_html(CURRENCIES_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
+        df = pd.read_html(FOREX_SYMBOLS_SCRAPER_URL, storage_options=headers)[0] # First table on the page
         symbols = df['Symbol'].dropna().tolist() # the nan values make the xcom fail
         print("Finished getting the forex symbols")
         print("Forex symbols:", symbols)
@@ -288,7 +126,7 @@ def ingestion_pipeline():
         ret = {}
         for symbol in symbols : 
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period=f"{12 * 20}mo", interval="1wk") 
+            hist = ticker.history(period="1mo", interval="1wk") 
             if not hist.empty:
                 hist = hist.reset_index()
                 data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
@@ -297,35 +135,97 @@ def ingestion_pipeline():
                 ret[symbol] = None
         return ret
 
-    @task 
-    def load_to_db(data, collection):
-        """Load data into the mongo db"""
-        
-   
+    @task
+    def transform(chunk):
+        documents = [] # documents creation that will hold the data 
+        for key in chunk.keys() :
+            doc = {}
+            doc["_id"] = key
+            doc["values"] = chunk[key]
+            documents.append(doc)
+        print(f"finished, the list of documents is : {documents}")
+        return documents
+
+    @task
+    def load_to_db(chunk, collection_name):
+        """Load chunked information into the MongoDB"""
+        print("loading information into db")
+        mongo_client = MongoClient(MONGO_DB_URI)  # Make sure MONGO_DB_URI is set
+        db = mongo_client["raw_data_db"]
+        collection = db[collection_name]
+        for doc in chunk:
+            collection.update_one(
+                {"_id": doc["_id"]}, 
+                {"$set": {"values": doc["values"]}},
+                upsert=True
+            )
+        print("Information loaded into db successfully.")
 
 
     init = init_env()
+
+    # ==========================
+    # SYMBOLS EXTRACTION TASKS
+    # ==========================
     crypto_symbols = get_crypto_symbols()
     forex_symbols = get_forex_symbols()
     futures_symbols = get_futures_symbols()
     indices_symbols = get_indices_symbols()
-    init >> [crypto_symbols, forex_symbols, futures_symbols, indices_symbols]
 
-    crypto_symbol_chunks = chunk_symbols(crypto_symbols)
-    forex_symbols_chunks = chunk_symbols(forex_symbols)
-    futures_symbols_chunks = chunk_symbols(futures_symbols)
-    indices_symbols_chunks = chunk_symbols(indices_symbols)
+    # ==========================
+    # DATA CHUNKING
+    # ==========================
+    crypto_symbol_chunks = chunk(crypto_symbols)
+    forex_symbols_chunks = chunk(forex_symbols)
+    futures_symbols_chunks = chunk(futures_symbols)
+    indices_symbols_chunks = chunk(indices_symbols)
 
+    # ==========================
+    # INFO EXTRACTION TASKS
+    # ==========================
     crypto_info = get_data_info.expand(symbols=crypto_symbol_chunks)
     forex_info = get_data_info.expand(symbols=forex_symbols_chunks)
     futures_info = get_data_info.expand(symbols=futures_symbols_chunks)
     indices_info = get_data_info.expand(symbols=indices_symbols_chunks)
 
+    # ==========================
+    # VALUES EXTRACTION TASKS
+    # ==========================
     crypto_values = get_data_values.expand(symbols=crypto_symbol_chunks)
     forex_values = get_data_values.expand(symbols=forex_symbols_chunks)
     futures_values = get_data_values.expand(symbols=futures_symbols_chunks)
     indices_values = get_data_values.expand(symbols=indices_symbols_chunks)
+
+
+    # ==========================
+    # TRANSFORMATION TASKS
+    # ==========================
+    jsoned_crypto_values = transform.expand(chunk=crypto_values)
+    jsoned_crypto_info = transform.expand(chunk=crypto_info)
+    jsoned_forex_values = transform.expand(chunk=forex_values)
+    jsoned_forex_info = transform.expand(chunk=forex_info)
+    jsoned_futures_values = transform.expand(chunk=futures_values)
+    jsoned_futures_info = transform.expand(chunk=futures_info)
+    jsoned_indices_values = transform.expand(chunk=indices_values)
+    jsoned_indices_info = transform.expand(chunk=indices_info)
+
+    # ==========================
+    # LOADING TASKS
+    # ==========================
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_INFORMATION).expand(chunk=jsoned_crypto_info)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES).expand(chunk=jsoned_crypto_values)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FOREX_INFORMATION).expand(chunk=jsoned_forex_info)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FOREX_VALUES).expand(chunk=jsoned_forex_values)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FUTURES_INFORMATION).expand(chunk=jsoned_futures_info)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FUTURES_VALUES).expand(chunk=jsoned_futures_values)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_INDICES_INFORMATION).expand(chunk=jsoned_indices_info)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_INDICES_VALUES).expand(chunk=jsoned_indices_values)
     
+    # ==========================
+    # TASK DEPENDENCIES
+    # ==========================
+    init >> [crypto_symbols, forex_symbols, futures_symbols, indices_symbols]
+
 
     
 

@@ -13,7 +13,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
     ports:
-      - "27017:27017"
+      - "${MONGO_DB_PORT}:${MONGO_DB_PORT}"
     volumes:
       - ./data/mongo:/data/db
       - ./config/mongodb/test:/docker-entrypoint-initdb.d # TODO remove test config
