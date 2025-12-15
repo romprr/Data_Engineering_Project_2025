@@ -1,11 +1,16 @@
 from datetime import datetime, timedelta
 
 from airflow.decorators import dag, task
+from airflow.operators.python import get_current_context
 import yfinance as yf
 import pandas as pd
 from pymongo import MongoClient
 import os
 import logging
+import glob
+from pathlib import Path
+import shutil
+from utils.file import write as file_write
 import json
 
 yf.set_tz_cache_location("/tmp/yfinance_cache")
@@ -57,14 +62,46 @@ def ingestion_pipeline():
     MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES")
     MONGO_DB_RAW_DATA_COLLECTION_WORLWIDE_EVENTS=os.getenv("MONGO_DB_RAW_DATA_COLLECTION_WORLWIDE_EVENTS")
     MONGO_DB_URI=os.getenv("MONGO_DB_URI")
+
+    INGESTION_TEMP_PATH=os.getenv("INGESTION_TEMP_PATH")
+    INGESTION_FUTURES_INFORMATION_TEMP_FOLDER=os.getenv("INGESTION_FUTURES_INFORMATION_TEMP_FOLDER")
+    INGESTION_FUTURES_VALUES_TEMP_FOLDER=os.getenv("INGESTION_FUTURES_VALUES_TEMP_FOLDER")
+    INGESTION_INDICES_INFORMATION_TEMP_FOLDER=os.getenv("INGESTION_INDICES_INFORMATION_TEMP_FOLDER")
+    INGESTION_INDICES_VALUES_TEMP_FOLDER=os.getenv("INGESTION_INDICES_VALUES_TEMP_FOLDER")
+    INGESTION_FOREX_INFORMATION_TEMP_FOLDER=os.getenv("INGESTION_FOREX_INFORMATION_TEMP_FOLDER")
+    INGESTION_FOREX_VALUES_TEMP_FOLDER=os.getenv("INGESTION_FOREX_VALUES_TEMP_FOLDER")
+    INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FOLDER=os.getenv("INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FOLDER")
+    INGESTION_CRYPTOCURRENCIES_VALUES_TEMP_FOLDER=os.getenv("INGESTION_CRYPTOCURRENCIES_VALUES_TEMP_FOLDER")
+    INGESTION_WORLWIDE_EVENTS_TEMP_FOLDER=os.getenv("INGESTION_WORLWIDE_EVENTS_TEMP_FOLDER")
+
+    folders = [
+        INGESTION_FUTURES_INFORMATION_TEMP_FOLDER,
+        INGESTION_FUTURES_VALUES_TEMP_FOLDER,
+        INGESTION_INDICES_INFORMATION_TEMP_FOLDER,
+        INGESTION_INDICES_VALUES_TEMP_FOLDER,
+        INGESTION_FOREX_INFORMATION_TEMP_FOLDER,
+        INGESTION_FOREX_VALUES_TEMP_FOLDER,
+        INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FOLDER,
+        INGESTION_CRYPTOCURRENCIES_VALUES_TEMP_FOLDER,
+        INGESTION_WORLWIDE_EVENTS_TEMP_FOLDER
+    ]
     @task 
-    def init_env():
+    def init_env(folders):
         """Initialize environment"""
         print("Initializing environment...")
+        for folder in folders:
+            if folder is None:
+                continue  # Skip if environment variable not set
+            path = Path(folder)
+            if path.exists():
+                shutil.rmtree(path)  # Delete folder and contents
+            path.mkdir(parents=True, exist_ok=True)  # Recreate folder
+            print(f"Reset folder: {path}")
+        print("Temp folder cleared.")
         print("Environment initialized.")
 
     @task
-    def chunk(symbols, chunk_size=7):
+    def chunk(symbols, chunk_size):
         return [
             symbols[i : i + chunk_size]
             for i in range(0, len(symbols), chunk_size)
@@ -113,56 +150,58 @@ def ingestion_pipeline():
         return symbols
 
     @task
-    def get_data_info(symbols):
-        ret = {}
+    def get_data_info(symbols, folder_path):
+        context = get_current_context()
+        chunk_index = context["ti"].map_index
+        file_path = folder_path + "/"+ chunk_index.__str__() + ".jsonl"
         for symbol in symbols : 
             ticker = yf.Ticker(symbol)
             info = ticker.info
-            ret[symbol] = info
-        return ret   
+            info["_id"] = symbol
+            file_write(info, file_path)
+        return file_path
 
     @task
-    def get_data_values(symbols):
-        ret = {}
+    def get_data_values(symbols, folder_path):
+        context = get_current_context()
+        chunk_index = context["ti"].map_index
+        file_path = folder_path + "/" + chunk_index.__str__() + ".jsonl"
         for symbol in symbols : 
+            ret = {}
+            ret["_id"] = symbol
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="1mo", interval="1wk") 
-            if not hist.empty:
-                hist = hist.reset_index()
-                data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-                ret[symbol] = data
-            else:
-                ret[symbol] = None
-        return ret
+            hist = ticker.history(period=f"{20*12}mo", interval="1mo") 
+            hist = hist.reset_index()
+            data = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
+            ret["values"] = data
+            file_write(ret, file_path)
+        return file_path
 
     @task
-    def transform(chunk):
-        documents = [] # documents creation that will hold the data 
-        for key in chunk.keys() :
-            doc = {}
-            doc["_id"] = key
-            doc["values"] = chunk[key]
-            documents.append(doc)
-        print(f"finished, the list of documents is : {documents}")
-        return documents
-
-    @task
-    def load_to_db(chunk, collection_name):
-        """Load chunked information into the MongoDB"""
+    def load_to_db(file, collection_name):
+        """Load chunked file information into the MongoDB"""
         print("loading information into db")
         mongo_client = MongoClient(MONGO_DB_URI)  # Make sure MONGO_DB_URI is set
         db = mongo_client["raw_data_db"]
         collection = db[collection_name]
-        for doc in chunk:
-            collection.update_one(
-                {"_id": doc["_id"]}, 
-                {"$set": {"values": doc["values"]}},
-                upsert=True
-            )
+        with open(file, "r") as f:
+            for line in f:
+                if not line.strip():
+                    continue  # skip empty lines
+                doc = json.loads(line)
+                # Insert or update document as-is
+                if "_id" in doc:
+                    collection.update_one(
+                        {"_id": doc["_id"]},
+                        {"$set": doc},
+                        upsert=True
+                    )
+                else:
+                    collection.insert_one(doc)
         print("Information loaded into db successfully.")
 
 
-    init = init_env()
+    init = init_env(folders)
 
     # ==========================
     # SYMBOLS EXTRACTION TASKS
@@ -172,55 +211,39 @@ def ingestion_pipeline():
     futures_symbols = get_futures_symbols()
     indices_symbols = get_indices_symbols()
 
-    # ==========================
-    # DATA CHUNKING
-    # ==========================
-    crypto_symbol_chunks = chunk(crypto_symbols)
-    forex_symbols_chunks = chunk(forex_symbols)
-    futures_symbols_chunks = chunk(futures_symbols)
-    indices_symbols_chunks = chunk(indices_symbols)
 
     # ==========================
     # INFO EXTRACTION TASKS
     # ==========================
-    crypto_info = get_data_info.expand(symbols=crypto_symbol_chunks)
-    forex_info = get_data_info.expand(symbols=forex_symbols_chunks)
-    futures_info = get_data_info.expand(symbols=futures_symbols_chunks)
-    indices_info = get_data_info.expand(symbols=indices_symbols_chunks)
+    crypto_info_files = get_data_info.partial(folder_path=INGESTION_CRYPTOCURRENCIES_INFORMATION_TEMP_FOLDER).expand(symbols=chunk(crypto_symbols, 10))
+    forex_info_files = get_data_info.partial(folder_path=INGESTION_FOREX_INFORMATION_TEMP_FOLDER).expand(symbols=chunk(forex_symbols, 10))
+    futures_info_files = get_data_info.partial(folder_path=INGESTION_FUTURES_INFORMATION_TEMP_FOLDER).expand(symbols=chunk(futures_symbols, 10))
+    indices_info_files = get_data_info.partial(folder_path=INGESTION_INDICES_INFORMATION_TEMP_FOLDER).expand(symbols=chunk(indices_symbols, 10))
 
     # ==========================
     # VALUES EXTRACTION TASKS
     # ==========================
-    crypto_values = get_data_values.expand(symbols=crypto_symbol_chunks)
-    forex_values = get_data_values.expand(symbols=forex_symbols_chunks)
-    futures_values = get_data_values.expand(symbols=futures_symbols_chunks)
-    indices_values = get_data_values.expand(symbols=indices_symbols_chunks)
-
-
-    # ==========================
-    # TRANSFORMATION TASKS
-    # ==========================
-    jsoned_crypto_values = transform.expand(chunk=crypto_values)
-    jsoned_crypto_info = transform.expand(chunk=crypto_info)
-    jsoned_forex_values = transform.expand(chunk=forex_values)
-    jsoned_forex_info = transform.expand(chunk=forex_info)
-    jsoned_futures_values = transform.expand(chunk=futures_values)
-    jsoned_futures_info = transform.expand(chunk=futures_info)
-    jsoned_indices_values = transform.expand(chunk=indices_values)
-    jsoned_indices_info = transform.expand(chunk=indices_info)
+    crypto_values_files = get_data_values.partial(folder_path=INGESTION_CRYPTOCURRENCIES_VALUES_TEMP_FOLDER).expand(symbols=chunk(crypto_symbols, 5))
+    forex_values_files = get_data_values.partial(folder_path=INGESTION_FOREX_VALUES_TEMP_FOLDER).expand(symbols=chunk(forex_symbols, 5))
+    futures_values_files = get_data_values.partial(folder_path=INGESTION_FUTURES_VALUES_TEMP_FOLDER).expand(symbols=chunk(futures_symbols, 5))
+    indices_values_files = get_data_values.partial(folder_path=INGESTION_INDICES_VALUES_TEMP_FOLDER).expand(symbols=chunk(indices_symbols, 5))
 
     # ==========================
-    # LOADING TASKS
+    # INFO LOADING TASKS
     # ==========================
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_INFORMATION).expand(chunk=jsoned_crypto_info)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES).expand(chunk=jsoned_crypto_values)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FOREX_INFORMATION).expand(chunk=jsoned_forex_info)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FOREX_VALUES).expand(chunk=jsoned_forex_values)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FUTURES_INFORMATION).expand(chunk=jsoned_futures_info)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FUTURES_VALUES).expand(chunk=jsoned_futures_values)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_INDICES_INFORMATION).expand(chunk=jsoned_indices_info)
-    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_INDICES_VALUES).expand(chunk=jsoned_indices_values)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_INFORMATION).expand(file=crypto_info_files)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FOREX_INFORMATION).expand(file=forex_info_files)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FUTURES_INFORMATION).expand(file=futures_info_files)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_INDICES_INFORMATION).expand(file=indices_info_files)
     
+    # ==========================
+    # VALUES LOADING TASKS
+    # ==========================
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_CRYPTOCURRENCIES_VALUES).expand(file=crypto_values_files)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FOREX_VALUES).expand(file=forex_values_files)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_FUTURES_VALUES).expand(file=futures_values_files)
+    load_to_db.partial(collection_name=MONGO_DB_RAW_DATA_COLLECTION_INDICES_VALUES).expand(file=indices_values_files)
+
     # ==========================
     # TASK DEPENDENCIES
     # ==========================
