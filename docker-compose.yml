@@ -59,6 +59,7 @@ services:
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./config/postgres/test:/docker-entrypoint-initdb.d # TODO remove test config
+      - ./src/temp:/tmp
     networks:
       - staging
 

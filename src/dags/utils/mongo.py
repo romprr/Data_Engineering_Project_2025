@@ -49,7 +49,7 @@ class MongoDBClient:
         if self.collection is None:
             raise RuntimeError("Not connected to MongoDB.")
         return self.collection.update_one({"_id" : data["_id"]}, {"$set": data}, upsert=True).upserted_id
-
+        
     def write_many(self, data_list: List[Dict[str, Any]]) -> List[Any]:
         """
         Insert multiple documents into the collection.

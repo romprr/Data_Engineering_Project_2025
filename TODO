@@ -1,3 +1,1 @@
-- Mise en place d'un systeme de fichier temporaire pour la sauvegarde des donnees (tout sauf les symbols) DONE
-- ajout d'un task pour la lecture du csv en chunks
-- faire une version offline (on peut cherhcer les fichier temporaire et les reconstruires)
+- duplication des clees bugs

@@ -30,9 +30,9 @@ class RedisClient:
     def write(self, key: Any, value: Any):
         if self.client is None:
             raise Exception("Redis connection not established.")
-        self.client.set(key, value)
+        self.client.rpush(key, value)
 
     def read(self, key: Any):
         if self.client is None:
             raise Exception("Redis connection not established.")
-        return self.client.get(key)
+        return self.client.lpop(key)

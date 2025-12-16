@@ -11,6 +11,7 @@ import logging
 import glob
 from pathlib import Path
 import shutil
+import requests
 from utils.file import write as file_write
 import json
 
@@ -115,6 +116,7 @@ def ingestion_pipeline():
             }
             mongoClient.write(doc)
         mongoClient.disconnect()
+        print("list of ids:", ids)#TODO remove
         return ids
 
     @task
@@ -146,12 +148,11 @@ def ingestion_pipeline():
     @task 
     def populate_redis_queue(ids, queue_name):
         redisClient = redis.RedisClient(uri=REDIS_URI)
+        print("ids to enqueue:", ids) # TODO remove
         redisClient.connect()
         for id in ids:
-            redisClient.client.rpush(queue_name, id)
+            redisClient.write(queue_name, id)
         redisClient.disconnect()
-    
-    init_env()
 
     # ==========================
     # SYMBOLS EXTRACTION TASKS
@@ -201,6 +202,8 @@ def ingestion_pipeline():
     # ==========================
     # TASK DEPENDENCIES
     # ==========================
+
+    init_env() >> [ crypto_symbols, forex_symbols, futures_symbols, indices_symbols ]
 
 
     
