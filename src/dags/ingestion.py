@@ -14,6 +14,7 @@ import shutil
 import requests
 from utils.file import write as file_write
 import json
+import zipfile
 
 yf.set_tz_cache_location("/tmp/yfinance_cache")
 logging.getLogger('yfinance').setLevel(logging.CRITICAL)
@@ -23,7 +24,7 @@ INDICES_SYMBOLS_SCRAPER_URL=os.getenv("INDICES_SYMBOLS_SCRAPER_URL")
 FUTURES_SYMBOLS_SCRAPER_URL=os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
 FOREX_SYMBOLS_SCRAPER_URL=os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 WORLDWIDE_EVENTS_CSV_FILE_URL=os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
-DOWNLOADS_PATH=os.getenv("DOWNLOADS_PATH")
+SHARED_FOLDER_PATH_AIRFLOW=os.getenv("SHARED_FOLDER_PATH_AIRFLOW")
 
 MONGO_DB_RAW_DATA_COLLECTION=os.getenv("MONGO_DB_RAW_DATA_COLLECTION")
 MONGO_DB_URI=os.getenv("MONGO_DB_URI")
@@ -146,64 +147,104 @@ def ingestion_pipeline():
         return ids
     
     @task 
-    def populate_redis_queue(ids, queue_name):
+    def populate_redis_queue(data, queue_name):
         redisClient = redis.RedisClient(uri=REDIS_URI)
-        print("ids to enqueue:", ids) # TODO remove
+        print("ids to enqueue:", data) # TODO remove
         redisClient.connect()
-        for id in ids:
-            redisClient.write(queue_name, id)
+        if isinstance(data, (list, tuple, set)):
+            for id in data:
+                redisClient.write(queue_name, id)
+        else:
+            redisClient.write(queue_name, data)
         redisClient.disconnect()
+
+    @task
+    def download_file(URL, path):
+        response = requests.get(URL, stream=True)
+        response.raise_for_status()
+        # Ensure the download path exists
+        os.makedirs(path, exist_ok=True)
+        # Get the filename from the URL or use a default
+        filename = os.path.basename(URL)
+        if not filename.endswith('.zip'):
+            filename = 'downloaded_file.zip'
+        file_path = os.path.join(path, filename)
+        with open(file_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        print(f"Downloaded file from {URL} to {file_path}")
+        return file_path
+
+    @task 
+    def unzip_file(zip_file_path, extract_to_path):
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_to_path)
+            extracted_files = zip_ref.namelist()
+        print(f"Extracted {zip_file_path} to {extract_to_path}")
+        # Delete the zip file after extraction
+        try:
+            os.remove(zip_file_path)
+            print(f"Deleted zip file: {zip_file_path}")
+        except Exception as e:
+            print(f"Failed to delete zip file: {zip_file_path}. Error: {e}")
+        # Return the absolute path of the first extracted file (or None if nothing extracted)
+        if extracted_files:
+            abs_path = os.path.abspath(os.path.join(extract_to_path, extracted_files[0]))
+            print(f"Extracted file absolute path: {abs_path}")
+            return abs_path
+        else:
+            return None
+    
 
     # ==========================
     # SYMBOLS EXTRACTION TASKS
     # ==========================
-    crypto_symbols = get_asset_symbols("crypto", URL=None)
-    forex_symbols = get_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
-    futures_symbols = get_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
-    indices_symbols = get_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
+    # crypto_symbols = get_asset_symbols("crypto", URL=None)
+    # forex_symbols = get_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
+    # futures_symbols = get_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
+    # indices_symbols = get_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
 
-    # chunking
-    crypto_chunks = chunk_list(crypto_symbols, 5)
-    forex_chunks = chunk_list(forex_symbols, 5)
-    futures_chunks = chunk_list(futures_symbols, 5)
-    indices_chunks = chunk_list(indices_symbols, 5)
+    # # chunking
+    # crypto_chunks = chunk_list(crypto_symbols, 5)
+    # forex_chunks = chunk_list(forex_symbols, 5)
+    # futures_chunks = chunk_list(futures_symbols, 5)
+    # indices_chunks = chunk_list(indices_symbols, 5)
 
-    # ==========================
-    # INFO EXTRACTION TASKS
-    # ==========================
-    crypto_info_keys = get_asset_info.partial(asset_type="crypto").expand(symbols=crypto_chunks)
-    forex_info_keys = get_asset_info.partial(asset_type="forex").expand(symbols=forex_chunks)
-    futures_info_keys = get_asset_info.partial(asset_type="futures").expand(symbols=futures_chunks)
-    indices_info_keys = get_asset_info.partial(asset_type="indices").expand(symbols=indices_chunks)
-    populate_redis_queue.partial(queue_name="crypto_info_queue").expand(ids=crypto_info_keys)
-    populate_redis_queue.partial(queue_name="forex_info_queue").expand(ids=forex_info_keys)
-    populate_redis_queue.partial(queue_name="futures_info_queue").expand(ids=futures_info_keys)
-    populate_redis_queue.partial(queue_name="indices_info_queue").expand(ids=indices_info_keys)
+    # # ==========================
+    # # INFO EXTRACTION TASKS
+    # # ==========================
+    # crypto_info_keys = get_asset_info.partial(asset_type="crypto").expand(symbols=crypto_chunks)
+    # forex_info_keys = get_asset_info.partial(asset_type="forex").expand(symbols=forex_chunks)
+    # futures_info_keys = get_asset_info.partial(asset_type="futures").expand(symbols=futures_chunks)
+    # indices_info_keys = get_asset_info.partial(asset_type="indices").expand(symbols=indices_chunks)
+    # populate_redis_queue.partial(queue_name="crypto_info_queue").expand(ids=crypto_info_keys)
+    # populate_redis_queue.partial(queue_name="forex_info_queue").expand(ids=forex_info_keys)
+    # populate_redis_queue.partial(queue_name="futures_info_queue").expand(ids=futures_info_keys)
+    # populate_redis_queue.partial(queue_name="indices_info_queue").expand(ids=indices_info_keys)
 
-    crypto_history_keys = get_asset_history.partial(asset_type="crypto").expand(symbols=crypto_chunks)
-    forex_history_keys = get_asset_history.partial(asset_type="forex").expand(symbols=forex_chunks)
-    futures_history_keys = get_asset_history.partial(asset_type="futures").expand(symbols=futures_chunks)
-    indices_history_keys = get_asset_history.partial(asset_type="indices").expand(symbols=indices_chunks)
+    # crypto_history_keys = get_asset_history.partial(asset_type="crypto").expand(symbols=crypto_chunks)
+    # forex_history_keys = get_asset_history.partial(asset_type="forex").expand(symbols=forex_chunks)
+    # futures_history_keys = get_asset_history.partial(asset_type="futures").expand(symbols=futures_chunks)
+    # indices_history_keys = get_asset_history.partial(asset_type="indices").expand(symbols=indices_chunks)
 
-    populate_redis_queue.partial(queue_name="crypto_history_queue").expand(ids=crypto_history_keys)
-    populate_redis_queue.partial(queue_name="forex_history_queue").expand(ids=forex_history_keys)
-    populate_redis_queue.partial(queue_name="futures_history_queue").expand(ids=futures_history_keys)
-    populate_redis_queue.partial(queue_name="indices_history_queue").expand(ids=indices_history_keys)
+    # populate_redis_queue.partial(queue_name="crypto_history_queue").expand(ids=crypto_history_keys)
+    # populate_redis_queue.partial(queue_name="forex_history_queue").expand(ids=forex_history_keys)
+    # populate_redis_queue.partial(queue_name="futures_history_queue").expand(ids=futures_history_keys)
+    # populate_redis_queue.partial(queue_name="indices_history_queue").expand(ids=indices_history_keys)
 
-    # ==========================
-    # EVENTS EXTRACTION TASKS
-    # ==========================
-    # GET THE FILE
+    # # ==========================
+    # # EVENTS EXTRACTION TASKS
+    # # ==========================
+    # file_path = download_file(WORLDWIDE_EVENTS_CSV_FILE_URL, SHARED_FOLDER_PATH_AIRFLOW)
+    # extracted_path = unzip_file(file_path, SHARED_FOLDER_PATH_AIRFLOW)
+    # populate_redis_queue(extracted_path, "worldwide_events_file_queue")
 
-    # UNZIP THE FILE
-    # CHUNK THE FILE
-    # READ CHUNKS AND PREPARE FOR LOADING
+    # # ==========================
+    # # TASK DEPENDENCIES
+    # # ==========================
 
-    # ==========================
-    # TASK DEPENDENCIES
-    # ==========================
-
-    init_env() >> [ crypto_symbols, forex_symbols, futures_symbols, indices_symbols ]
+    # init_env() >> [ crypto_symbols, forex_symbols, futures_symbols, indices_symbols ]
 
 
     

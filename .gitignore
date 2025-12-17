@@ -4,4 +4,4 @@ data/
 metadata/
 *.DS_Store
 tester/
-TODO.md
+TODO.mdshared_data/*
