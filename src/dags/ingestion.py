@@ -51,7 +51,7 @@ default_args = {
 @dag(
         dag_id="ingestion_pipeline",
         default_args=default_args, 
-        schedule="@daily", 
+        schedule=None, 
         start_date=datetime.now() - timedelta(days=1), 
         description="The pipeline that will get the data from different sources and insert it into the Mongo database",
         catchup=False, 
@@ -122,6 +122,7 @@ def ingestion_pipeline():
 
     @task
     def get_asset_history(asset_type, symbols):
+        print("getting the history for symbols:", symbols)
         mongoClient = mongo.MongoDBClient(
             uri=MONGO_DB_URI,
             database="raw_data_db",
@@ -200,54 +201,59 @@ def ingestion_pipeline():
     # ==========================
     # SYMBOLS EXTRACTION TASKS
     # ==========================
-    # crypto_symbols = get_asset_symbols("crypto", URL=None)
-    # forex_symbols = get_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
-    # futures_symbols = get_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
-    # indices_symbols = get_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
+    crypto_symbols = get_asset_symbols("crypto", URL=None)
+    forex_symbols = get_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
+    futures_symbols = get_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
+    indices_symbols = get_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
 
-    # # chunking
-    # crypto_chunks = chunk_list(crypto_symbols, 5)
-    # forex_chunks = chunk_list(forex_symbols, 5)
-    # futures_chunks = chunk_list(futures_symbols, 5)
-    # indices_chunks = chunk_list(indices_symbols, 5)
+    # chunking
+    crypto_chunks = chunk_list(crypto_symbols, 5)
+    forex_chunks = chunk_list(forex_symbols, 5)
+    futures_chunks = chunk_list(futures_symbols, 5)
+    indices_chunks = chunk_list(indices_symbols, 5)
 
-    # # ==========================
-    # # INFO EXTRACTION TASKS
-    # # ==========================
-    # crypto_info_keys = get_asset_info.partial(asset_type="crypto").expand(symbols=crypto_chunks)
-    # forex_info_keys = get_asset_info.partial(asset_type="forex").expand(symbols=forex_chunks)
-    # futures_info_keys = get_asset_info.partial(asset_type="futures").expand(symbols=futures_chunks)
-    # indices_info_keys = get_asset_info.partial(asset_type="indices").expand(symbols=indices_chunks)
-    # populate_redis_queue.partial(queue_name="crypto_info_queue").expand(ids=crypto_info_keys)
-    # populate_redis_queue.partial(queue_name="forex_info_queue").expand(ids=forex_info_keys)
-    # populate_redis_queue.partial(queue_name="futures_info_queue").expand(ids=futures_info_keys)
-    # populate_redis_queue.partial(queue_name="indices_info_queue").expand(ids=indices_info_keys)
+    end_task = end()
 
-    # crypto_history_keys = get_asset_history.partial(asset_type="crypto").expand(symbols=crypto_chunks)
-    # forex_history_keys = get_asset_history.partial(asset_type="forex").expand(symbols=forex_chunks)
-    # futures_history_keys = get_asset_history.partial(asset_type="futures").expand(symbols=futures_chunks)
-    # indices_history_keys = get_asset_history.partial(asset_type="indices").expand(symbols=indices_chunks)
+    # ==========================
+    # INFO EXTRACTION TASKS
+    # ==========================
+    crypto_info_keys = get_asset_info.partial(asset_type="crypto").expand(symbols=crypto_chunks)
+    forex_info_keys = get_asset_info.partial(asset_type="forex").expand(symbols=forex_chunks)
+    futures_info_keys = get_asset_info.partial(asset_type="futures").expand(symbols=futures_chunks)
+    indices_info_keys = get_asset_info.partial(asset_type="indices").expand(symbols=indices_chunks)
+    populate_redis_queue.partial(queue_name="crypto_info_queue").expand(data=crypto_info_keys) >> end_task
+    populate_redis_queue.partial(queue_name="forex_info_queue").expand(data=forex_info_keys) >> end_task
+    populate_redis_queue.partial(queue_name="futures_info_queue").expand(data=futures_info_keys) >> end_task
+    populate_redis_queue.partial(queue_name="indices_info_queue").expand(data=indices_info_keys) >> end_task    
 
-    # populate_redis_queue.partial(queue_name="crypto_history_queue").expand(ids=crypto_history_keys)
-    # populate_redis_queue.partial(queue_name="forex_history_queue").expand(ids=forex_history_keys)
-    # populate_redis_queue.partial(queue_name="futures_history_queue").expand(ids=futures_history_keys)
-    # populate_redis_queue.partial(queue_name="indices_history_queue").expand(ids=indices_history_keys)
+    crypto_history_keys = get_asset_history.partial(asset_type="crypto").expand(symbols=crypto_chunks)
+    forex_history_keys = get_asset_history.partial(asset_type="forex").expand(symbols=forex_chunks)
+    futures_history_keys = get_asset_history.partial(asset_type="futures").expand(symbols=futures_chunks)
+    indices_history_keys = get_asset_history.partial(asset_type="indices").expand(symbols=indices_chunks)
 
-    # # ==========================
-    # # EVENTS EXTRACTION TASKS
-    # # ==========================
-    # file_path = download_file(WORLDWIDE_EVENTS_CSV_FILE_URL, SHARED_FOLDER_PATH_AIRFLOW)
-    # extracted_path = unzip_file(file_path, SHARED_FOLDER_PATH_AIRFLOW)
-    # populate_redis_queue(extracted_path, "worldwide_events_file_queue")
+    populate_redis_queue.partial(queue_name="crypto_history_queue").expand(data=crypto_history_keys) >> end_task
+    populate_redis_queue.partial(queue_name="forex_history_queue").expand(data=forex_history_keys) >> end_task
+    populate_redis_queue.partial(queue_name="futures_history_queue").expand(data=futures_history_keys) >> end_task
+    populate_redis_queue.partial(queue_name="indices_history_queue").expand(data=indices_history_keys) >> end_task
 
-    # # ==========================
-    # # TASK DEPENDENCIES
-    # # ==========================
+    # ==========================
+    # EVENTS EXTRACTION TASKS
+    # ==========================
+    file_path = download_file(WORLDWIDE_EVENTS_CSV_FILE_URL, SHARED_FOLDER_PATH_AIRFLOW)
+    extracted_path = unzip_file(file_path, SHARED_FOLDER_PATH_AIRFLOW)
+    populate_redis_queue(extracted_path, "worldwide_events_file_queue") >> end_task
 
-    # init_env() >> [ crypto_symbols, forex_symbols, futures_symbols, indices_symbols ]
+    # ==========================
+    # TASK DEPENDENCIES
+    # ==========================
 
-
-    
+    init_env() >> [ 
+        crypto_symbols,
+        forex_symbols,
+        futures_symbols,
+        indices_symbols, 
+        file_path
+        ]
 
 
 ingestion_pipeline()
