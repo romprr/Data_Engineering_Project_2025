@@ -1,0 +1,1 @@
+redis://crud:crud@redis-1:6379/0
