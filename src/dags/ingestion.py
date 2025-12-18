@@ -1,45 +1,49 @@
 from datetime import datetime, timedelta
 
 from airflow.decorators import dag, task
-from airflow.operators.python import get_current_context
 import yfinance as yf
 import pandas as pd
 import utils.mongo as mongo
 import utils.redis as redis
 import os
 import logging
-import glob
-from pathlib import Path
-import shutil
 import requests
-from utils.file import write as file_write
 import json
 import zipfile
 
+# =========================
+# LOGGING CONFIGURATION
+# =========================
 yf.set_tz_cache_location("/tmp/yfinance_cache")
 logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 
-# Constants 
+# =========================
+# ENV VARIABLES IMPORTS
+# ========================= 
 INDICES_SYMBOLS_SCRAPER_URL=os.getenv("INDICES_SYMBOLS_SCRAPER_URL")
 FUTURES_SYMBOLS_SCRAPER_URL=os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
 FOREX_SYMBOLS_SCRAPER_URL=os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 WORLDWIDE_EVENTS_CSV_FILE_URL=os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
 SHARED_FOLDER_PATH_AIRFLOW=os.getenv("SHARED_FOLDER_PATH_AIRFLOW")
-
-MONGO_DB_RAW_DATA_COLLECTION=os.getenv("MONGO_DB_RAW_DATA_COLLECTION")
+MONGO_DB_INGESTION_COLLECTION=os.getenv("MONGO_DB_INGESTION_COLLECTION")
+MONGO_DB_INGESTION_DATABASE=os.getenv("MONGO_DB_INGESTION_DATABASE")
 MONGO_DB_URI=os.getenv("MONGO_DB_URI")
+REDIS_1_URI=os.getenv("REDIS_1_URI")
 
-REDIS_URI = "redis://crud:crud@redis-1:6379/0"
-
+# =========================
+# GLOBAL VARIABLES 
+# =========================
 ASSETS_TYPES = ["forex", "futures", "indices", "crypto"]
 ASSETS_SCRAPPER_URLS = [
     FOREX_SYMBOLS_SCRAPER_URL,
     FUTURES_SYMBOLS_SCRAPER_URL,
     INDICES_SYMBOLS_SCRAPER_URL,
-    None  # Crypto symbols are hardcoded
+    None  # Crypto symbols are hardcoded, no scrapper URL
 ]
 
-
+# =========================
+# DAG DEFINITION
+# =========================
 default_args = {
     "owner": "niceJobTeam",
     "depends_on_past": False, # do not depend on past runs
@@ -49,23 +53,24 @@ default_args = {
 }
 
 @dag(
-        dag_id="ingestion_pipeline",
-        default_args=default_args, 
-        schedule=None, 
-        start_date=datetime.now() - timedelta(days=1), 
-        description="The pipeline that will get the data from different sources and insert it into the Mongo database",
-        catchup=False, 
-        tags=["ingestion"]
+    dag_id="ingestion_pipeline",
+    default_args=default_args, 
+    schedule=None, 
+    start_date=datetime.now() - timedelta(days=1), 
+    description="The pipeline that will get the data from different sources and insert it into the Mongo database",
+    catchup=False, 
+    tags=["ingestion"]
     )
 def ingestion_pipeline():
     """Ingestion DAG to extract data from various sources and load into MongoDB"""
     @task 
-    def init_env():
-        """Initialize environment"""
-        print("Environment initialized.")
+    def start():
+        """Empty start task"""
+        print("Starting the ingestion pipeline...")
 
     @task
     def chunk_list(symbols, chunk_size):
+        """Chunk a list into smaller lists of a specified size."""
         return [
             symbols[i : i + chunk_size]
             for i in range(0, len(symbols), chunk_size)
@@ -73,34 +78,38 @@ def ingestion_pipeline():
     
     @task
     def end():
-        print("Ingestion pipeline completed successfully.")
+        """Empty end task"""
+        print("Ingestion pipeline completed")
 
     @task
     def get_asset_symbols(asset_type, URL):
+        """Scrapper to get the asset symbols from a given URL or hardcoded for crypto."""
+        print(f"Starting to get the {asset_type} symbols...")
+        symbols = []
         if URL:
-            print(f"Getting the {asset_type} symbols from {URL}")
+            print(f"Scrapping: {URL}")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             df = pd.read_html(URL, storage_options=headers)[0]
             symbols = df['Symbol'].dropna().tolist()
-            print(f"Finished getting the {asset_type} symbols")
-            print(f"{asset_type} symbols:", symbols)
-            return symbols
+            print(f"Scrapping completed.")
         elif asset_type == "crypto" and URL is None:
             print(f"Getting {asset_type} symbols (hardcoded)...")
-            return ["BTC-USD", "ETH-USD"]
+            symbols = ["BTC-USD", "ETH-USD"]
+        print(f"Number of {asset_type} symbols found: {len(symbols)}")
+        return symbols
 
     @task
     def get_asset_info(asset_type, symbols):
-        print("Connection to mongo ")
+        """Get asset info from yfinance and store in MongoDB. 
+        The MongoDB document ID is formatted as {asset_type}_{symbol}_info 
+        to be later pushed into redis"""
+        print(f"Fetching info for asset type: {asset_type}")
         mongoClient = mongo.MongoDBClient(
             uri=MONGO_DB_URI,
-            database="raw_data_db",
-            collection="ingestion"
+            database=MONGO_DB_INGESTION_DATABASE,
+            collection=MONGO_DB_INGESTION_COLLECTION
         )
         mongoClient.connect()
-        print("connected to mongo ")
-        print("fetching info for symbols:", symbols)
-        print("symbols type:", type(symbols))
         ids = []
         for symbol in symbols : 
             print(f"Fetching info for symbol: {symbol}")
@@ -117,12 +126,15 @@ def ingestion_pipeline():
             }
             mongoClient.write(doc)
         mongoClient.disconnect()
-        print("list of ids:", ids)#TODO remove
+        print(f"Completed fetching info for asset type: {asset_type}")
         return ids
 
     @task
     def get_asset_history(asset_type, symbols):
-        print("getting the history for symbols:", symbols)
+        """Get asset historical data from yfinance and store in MongoDB. 
+        The MongoDB document ID is formatted as {asset_type}_{symbol}_history
+        to be later pushed into redis"""
+        print(f"Fetching history for asset type: {asset_type}")
         mongoClient = mongo.MongoDBClient(
             uri=MONGO_DB_URI,
             database="raw_data_db",
@@ -145,12 +157,14 @@ def ingestion_pipeline():
             }
             mongoClient.write(doc)
         mongoClient.disconnect()
+        print(f"Completed fetching history for asset type: {asset_type}")
         return ids
     
     @task 
     def populate_redis_queue(data, queue_name):
-        redisClient = redis.RedisClient(uri=REDIS_URI)
-        print("ids to enqueue:", data) # TODO remove
+        """Pushing mongo document IDs into Redis queue for further processing."""
+        print(f"Pushing data into Redis queue: {queue_name}")
+        redisClient = redis.RedisClient(uri=REDIS_1_URI)
         redisClient.connect()
         if isinstance(data, (list, tuple, set)):
             for id in data:
@@ -158,9 +172,13 @@ def ingestion_pipeline():
         else:
             redisClient.write(queue_name, data)
         redisClient.disconnect()
+        print(f"Completed pushing data into Redis queue: {queue_name}")
+
 
     @task
     def download_file(URL, path):
+        """Download a file from a URL to a specified path."""
+        print(f"Downloading file from {URL} to {path}...")
         response = requests.get(URL, stream=True)
         response.raise_for_status()
         # Ensure the download path exists
@@ -170,6 +188,7 @@ def ingestion_pipeline():
         if not filename.endswith('.zip'):
             filename = 'downloaded_file.zip'
         file_path = os.path.join(path, filename)
+        # Write the content to a file in chunks to handle large files
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -179,6 +198,8 @@ def ingestion_pipeline():
 
     @task 
     def unzip_file(zip_file_path, extract_to_path):
+        """Unzip a zip file to a specified directory and delete the zip file after extraction."""
+        print(f"Unzipping file {zip_file_path} to {extract_to_path}...")
         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to_path)
             extracted_files = zip_ref.namelist()
@@ -241,13 +262,13 @@ def ingestion_pipeline():
     # ==========================
     file_path = download_file(WORLDWIDE_EVENTS_CSV_FILE_URL, SHARED_FOLDER_PATH_AIRFLOW)
     extracted_path = unzip_file(file_path, SHARED_FOLDER_PATH_AIRFLOW)
-    populate_redis_queue(extracted_path, "worldwide_events_file_queue") >> end_task
+    populate_redis_queue(extracted_path, "files_queue") >> end_task
 
     # ==========================
     # TASK DEPENDENCIES
     # ==========================
 
-    init_env() >> [ 
+    start() >> [ 
         crypto_symbols,
         forex_symbols,
         futures_symbols,
