@@ -1,6 +1,7 @@
 *__pycache__/
-env/
 .env
 data/
 metadata/
 *.DS_Store
+tester/
+TODO.mdshared_data/*

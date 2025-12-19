@@ -7,21 +7,25 @@ services:
   mongo-db:
     image: mongo:latest
     container_name: mongo
+    restart: always
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
     ports:
-      - "27017:27017"
+      - "${MONGO_DB_PORT}:${MONGO_DB_PORT}"
     volumes:
       - ./data/mongo:/data/db
-      - ./config/mongodb:/docker-entrypoint-initdb.d
+      - ./config/mongodb/test:/docker-entrypoint-initdb.d # TODO remove test config
     networks:
       - ingestion
 
   redis-1:
     image: redis:latest
     container_name: redis-1
+    command : redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf
     ports:
       - "6380:6379"
     networks:
@@ -31,6 +35,9 @@ services:
   redis-2:
     image: redis:latest
     container_name: redis-2
+    command : redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf
     ports:
       - "6381:6379"
     networks:
@@ -51,7 +58,8 @@ services:
       - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
-      - ./config/postgres:/docker-entrypoint-initdb.d
+      - ./config/postgres/test:/docker-entrypoint-initdb.d # TODO remove test config
+      - ./shared_data:/shared
     networks:
       - staging
 

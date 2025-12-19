@@ -1,0 +1,6 @@
+# Add your DAG dependencies here
+apache-airflow
+apache-airflow-providers-http
+requests
+yfinance
+pymongo
