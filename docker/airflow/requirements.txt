@@ -4,3 +4,5 @@ apache-airflow-providers-http
 requests
 yfinance
 pymongo
+psycopg2-binary
+pandas
