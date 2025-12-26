@@ -4,4 +4,7 @@ data/
 metadata/
 *.DS_Store
 tester/
-TODO.mdshared_data/*
+TODO.md
+shared_data/*
+src/dags/logs
+venv/
