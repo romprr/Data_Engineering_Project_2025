@@ -29,6 +29,12 @@ INDICES_HISTORY_QUEUE = os.getenv("INDICES_HISTORY_QUEUE")
 FILES_QUEUE = os.getenv("FILES_QUEUE")
 SHARED_FOLDER_PATH_POSTGRES = os.getenv('SHARED_FOLDER_PATH_POSTGRES')
 
+# Postgres env variables 
+POSTGRES_CRED_USER=os.getenv('POSTGRES_USER')
+POSTGRES_CRED_PASSWORD=os.getenv('POSTGRES_PASSWORD')
+POSTGRES_CRED_HOST=os.getenv("POSTGRES_HOST")
+POSTGRES_CRED_DB=os.getenv('POSTGRES_DB')
+
 # Env variables specific to staging
 REDIS_2_URI = os.getenv("REDIS_2_URI")
 
@@ -86,7 +92,12 @@ def staging_pipeline() :
         )
 
         # Connect to postgres
-        postgresClient = PGDriver()
+        postgresClient = PGDriver(
+            POSTGRES_CRED_USER,
+            POSTGRES_CRED_PASSWORD,
+            POSTGRES_CRED_HOST,
+            POSTGRES_CRED_DB
+        )
 
         mongoClient.connect()
 
@@ -116,7 +127,12 @@ def staging_pipeline() :
         )
 
         # Connect to postgres
-        postgresClient = PGDriver()
+        postgresClient = PGDriver(
+            POSTGRES_CRED_USER,
+            POSTGRES_CRED_PASSWORD,
+            POSTGRES_CRED_HOST,
+            POSTGRES_CRED_DB
+        )
 
         mongoClient.connect()
 
@@ -142,7 +158,8 @@ def staging_pipeline() :
         redis_val = redisClient.read(queue_name)
         while redis_val != None :
             data = json.loads(redis_val)["data"]
-            if 'conflict' in data.lower() :
+            data_type = json.loads(redis_val)["type"]
+            if data_type == 'worldwide_events' :
                 ucdp_yearly.append(data)
             else :
                 ucdp_actors.append(data)
@@ -192,13 +209,14 @@ def staging_pipeline() :
         df = pd.read_csv(file_path, sep=',')
 
         df = df[
-            ['ActorId', 'NameData', 'NameOrigFull']
+            ['ActorId', 'NameData', 'NameOrigFull', 'ConflictId']
         ]
 
         df = df.rename(columns={
             "ActorId" : "actor_id",
             "NameData" : "actor_name",
-            "NameOrigFull" : "actor_og_name"
+            "NameOrigFull" : "actor_og_name",
+            "ConflictId" : "conflict_ids"
         })
 
         df.to_csv(file_path, index=False, na_rep='')
@@ -304,6 +322,12 @@ def staging_pipeline() :
         sql_file_name="ucdp_conflicts_region.sql"
     )
 
+    clean_actors = create_sql_operator(
+        task_id="clean_ucdp_actors",
+        dag_path=SQL_UCDP_PATH,
+        sql_file_name="ucdp_actors.sql"
+    )
+
     @task
     def get_yearly_files(all_files):
         return all_files["ucdp_yearly"]
@@ -351,9 +375,9 @@ def staging_pipeline() :
         task_id="load_ucdp_conflicts",
         conn_id="postgres",
         sql="""
-TRUNCATE TABLE CONFLICT;
+TRUNCATE TABLE raw.CONFLICT;
 
-COPY CONFLICT
+COPY raw.CONFLICT
 FROM %(file_path)s
 DELIMITER ','
 CSV HEADER;
@@ -366,9 +390,9 @@ CSV HEADER;
         task_id="load_ucdp_actors",
         conn_id="postgres",
         sql="""
-TRUNCATE TABLE UCDP_ACTORS;
+TRUNCATE TABLE raw.UCDP_ACTORS;
 
-COPY UCDP_ACTORS
+COPY raw.UCDP_ACTORS
 FROM %(file_path)s
 DELIMITER ','
 CSV HEADER;
@@ -382,7 +406,7 @@ CSV HEADER;
     load_index_infos >> load_index_history >> clean_index_infos >> clean_index_values
     load_crypto_infos >> load_crypto_history >> clean_crypto_infos >> clean_crypto_values
     load_forex_infos >> load_forex_history >> clean_forex_infos >> clean_forex_values
-    [load_ucdp_conflicts, load_ucdp_actors] >> clean_conflicts >> clean_episodes >> clean_side >> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
+    [load_ucdp_conflicts, load_ucdp_actors] >> clean_conflicts >> clean_episodes >> clean_actors >> clean_side >> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
     
     [
         clean_futures_values, 

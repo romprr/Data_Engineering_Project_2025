@@ -1,12 +1,13 @@
-DROP TABLE IF EXISTS ucdp_conflict;
+DROP TABLE IF EXISTS  staging.ucdp_conflict;
 
-CREATE TABLE ucdp_conflict AS (
+CREATE TABLE staging.ucdp_conflict AS (
     SELECT DISTINCT
         c.conflict_id as conflict_id,
         c.incompatibility as reason,
-        c.type_of_conflict as conflict_type,
+        MAX(c.type_of_conflict) as conflict_type,
         c.territory_name as disputed_territory,
         c.start_date as "start_date"
     FROM
-        CONFLICT c
+        raw.CONFLICT c
+    GROUP BY c.conflict_id, c.incompatibility, c.territory_name, c.start_date
 );

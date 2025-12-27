@@ -1,7 +1,7 @@
-DROP TABLE IF EXISTS ucdp_location;
+DROP TABLE IF EXISTS  staging.ucdp_location;
 
-CREATE TABLE ucdp_location AS (
+CREATE TABLE staging.ucdp_location AS (
     SELECT DISTINCT
-        UNNEST(STRING_TO_ARRAY(c.location, ',')) AS "location"
-    FROM CONFLICT c
+        TRIM(UNNEST(STRING_TO_ARRAY(c.location, ','))) AS "location"
+    FROM raw.CONFLICT c
 );

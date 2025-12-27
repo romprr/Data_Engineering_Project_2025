@@ -1,6 +1,6 @@
-DROP TABLE IF EXISTS ucdp_region;
+DROP TABLE IF EXISTS  staging.ucdp_region;
 
-CREATE TABLE ucdp_region AS (
+CREATE TABLE staging.ucdp_region AS (
     SELECT DISTINCT
         TRIM(region)::INT as region_id,
         CASE TRIM(region) 
@@ -31,6 +31,6 @@ CREATE TABLE ucdp_region AS (
     FROM (
         SELECT DISTINCT
             UNNEST(STRING_TO_ARRAY(c.region, ',')) AS "region"
-        FROM CONFLICT c
+        FROM raw.CONFLICT c
     )
 );

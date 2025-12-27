@@ -1,5 +1,10 @@
+-- Create schemas
+CREATE SCHEMA raw;
+CREATE SCHEMA staging;
+CREATE SCHEMA production;
+
 -- Create table
-CREATE TABLE INDEX_EXCHANGE (
+CREATE TABLE raw.INDEX_EXCHANGE (
     symbol VARCHAR(20)  PRIMARY KEY,
     currency VARCHAR(4) ,
     region VARCHAR(5) ,
@@ -8,7 +13,7 @@ CREATE TABLE INDEX_EXCHANGE (
 );
 
 -- This is the value of the indes, it's a time series
-CREATE TABLE INDEX_HISTORY (
+CREATE TABLE raw.INDEX_HISTORY (
     symbol VARCHAR(20) ,
     value_timestamp Varchar(50) ,
     value_open DECIMAL(30, 2) ,
@@ -20,13 +25,13 @@ CREATE TABLE INDEX_HISTORY (
     stock_splits INT ,
     PRIMARY KEY (symbol, value_timestamp),
     CONSTRAINT fk_index
-        FOREIGN KEY (symbol) REFERENCES INDEX_EXCHANGE(symbol)
+        FOREIGN KEY (symbol) REFERENCES raw.INDEX_EXCHANGE(symbol)
 );
 
 -- [ Forex ]
 
 -- Infos of forex exchange
-CREATE TABLE FOREX_EXCHANGE (
+CREATE TABLE raw.FOREX_EXCHANGE (
     symbol VARCHAR(20)  PRIMARY KEY,
     forex_name VARCHAR(41) , -- This is for example "EUR/USD"
     region VARCHAR(5),
@@ -35,7 +40,7 @@ CREATE TABLE FOREX_EXCHANGE (
 
 -- Forex values in timeseries
 
-CREATE TABLE FOREX_HISTORY (
+CREATE TABLE raw.FOREX_HISTORY (
     symbol VARCHAR(20) ,
     value_timestamp Varchar(50) ,
     value_open DECIMAL(30, 2) ,
@@ -47,12 +52,12 @@ CREATE TABLE FOREX_HISTORY (
     stock_splits INT ,
     PRIMARY KEY (symbol, value_timestamp),
     CONSTRAINT fk_forex 
-        FOREIGN KEY (symbol) REFERENCES FOREX_EXCHANGE(symbol)
+        FOREIGN KEY (symbol) REFERENCES raw.FOREX_EXCHANGE(symbol)
 );
 
 -- Futures infos
 -- Infos of forex exchange
-CREATE TABLE FUTURES_EXCHANGE (
+CREATE TABLE raw.FUTURES_EXCHANGE (
     symbol VARCHAR(20)  PRIMARY KEY,
     futures_name VARCHAR(41) ,
     region VARCHAR(5),
@@ -61,7 +66,7 @@ CREATE TABLE FUTURES_EXCHANGE (
 );
 
 -- Futures values
-CREATE TABLE FUTURES_HISTORY (
+CREATE TABLE raw.FUTURES_HISTORY (
     symbol VARCHAR(20) ,
     value_timestamp Varchar(50) ,
     value_open DECIMAL(30, 2) ,
@@ -73,13 +78,13 @@ CREATE TABLE FUTURES_HISTORY (
     stock_splits INT ,
     PRIMARY KEY (symbol, value_timestamp),
     CONSTRAINT fk_futures
-        FOREIGN KEY (symbol) REFERENCES FUTURES_EXCHANGE(symbol)
+        FOREIGN KEY (symbol) REFERENCES raw.FUTURES_EXCHANGE(symbol)
 );
 
 
 -- Crypto infos
 
-CREATE TABLE CRYPTO_EXCHANGE (
+CREATE TABLE raw.CRYPTO_EXCHANGE (
     symbol VARCHAR(20)  PRIMARY KEY,
     crypto_name VARCHAR(41) , -- This is for example "BTC-USD"
     region VARCHAR(5),
@@ -88,7 +93,7 @@ CREATE TABLE CRYPTO_EXCHANGE (
 
 -- Crypto values
 
-CREATE TABLE CRYPTO_HISTORY (
+CREATE TABLE raw.CRYPTO_HISTORY (
     symbol VARCHAR(20) ,
     value_timestamp Varchar(50) ,
     value_open DECIMAL(30, 2) ,
@@ -100,12 +105,12 @@ CREATE TABLE CRYPTO_HISTORY (
     stock_splits INT ,
     PRIMARY KEY (symbol, value_timestamp),
     CONSTRAINT fk_crypto
-        FOREIGN KEY (symbol) REFERENCES CRYPTO_EXCHANGE(symbol)
+        FOREIGN KEY (symbol) REFERENCES raw.CRYPTO_EXCHANGE(symbol)
 );
 
 
 -- [ UCDP DATA ]
-CREATE TABLE CONFLICT(
+CREATE TABLE raw.CONFLICT(
     conflict_id INT , -- this is the real id of the conflict but, because this is repeated it would be a problem for PG
     "location" TEXT ,
     "year" VARCHAR(4) , -- This will be used with the id as the primary key
@@ -138,16 +143,24 @@ CREATE TABLE CONFLICT(
     PRIMARY KEY (conflict_id, "year")
 );
 
-CREATE TABLE UCDP_ACTORS(
+CREATE TABLE raw.UCDP_ACTORS(
     actor_id INT,
     actor_name TEXT,
     actor_og_name TEXT,
+    conflict_ids TEXT,
     PRIMARY KEY (actor_id)
 );
 
-
 -- Permissions
 GRANT CONNECT ON DATABASE stock TO admin;
-GRANT USAGE, CREATE ON SCHEMA public TO admin;
-GRANT SELECT, INSERT, DELETE, UPDATE ON ALL TABLES IN SCHEMA public TO admin;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO admin;
+
+GRANT USAGE, CREATE ON SCHEMA raw, staging, production TO admin;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA raw, staging, production 
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO admin;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA raw, staging, production 
+GRANT USAGE, SELECT ON SEQUENCES TO admin;
+
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA raw, staging, production TO admin;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA raw, staging, production TO admin;

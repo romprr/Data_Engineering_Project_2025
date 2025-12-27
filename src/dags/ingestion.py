@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from airflow.decorators import dag, task
+from airflow.datasets import Dataset
 import yfinance as yf
 import pandas as pd
 import utils.mongo as mongo
@@ -24,6 +25,7 @@ INDICES_SYMBOLS_SCRAPER_URL = os.getenv("INDICES_SYMBOLS_SCRAPER_URL")
 FUTURES_SYMBOLS_SCRAPER_URL = os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
 FOREX_SYMBOLS_SCRAPER_URL = os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 WORLDWIDE_EVENTS_CSV_FILE_URL = os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
+WORLDWIDE_ACTORS_CSV_FILE_URL = os.getenv("WORLDWIDE_ACTORS_CSV_FILE_URL")
 SHARED_FOLDER_PATH_AIRFLOW = os.getenv("SHARED_FOLDER_PATH_AIRFLOW")
 MONGO_DB_INGESTION_COLLECTION = os.getenv("MONGO_DB_INGESTION_COLLECTION")
 MONGO_DB_INGESTION_DATABASE = os.getenv("MONGO_DB_INGESTION_DATABASE")
@@ -49,6 +51,9 @@ default_args = {
     "retry_delay": timedelta(minutes=5), # wait time between retries
     "email_on_failure": False, # disable email on failure
 }
+
+# Dataset to signal staging can trigger
+staging_reagy = Dataset('redis://staging_data_ready')
 
 @dag(
     dag_id="ingestion_pipeline",
@@ -223,7 +228,7 @@ def ingestion_pipeline():
         else:
             return None
     
-    @task
+    @task(outlets=[staging_reagy])
     def end():
         """Empty end task"""
         print("Ingestion pipeline completed")
@@ -253,7 +258,9 @@ def ingestion_pipeline():
 
     # CSV FILE DOWNLOAD AND EXTRACTION
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
+    file_path_actors = download_file(URL=WORLDWIDE_ACTORS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
     extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    extracted_metadata_actors = unzip_file(data_type="worldwide_actors", zip_file_path=file_path_actors, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     populate_tasks = [
         populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata),
@@ -264,7 +271,8 @@ def ingestion_pipeline():
         populate_redis_queue.partial(queue_name=FOREX_HISTORY_QUEUE).expand(data=forex_history_metadata),
         populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata),
         populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata),
-        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata)
+        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata),
+        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata_actors)
     ]
 
     # TASK DEPENDENCIES
@@ -273,7 +281,8 @@ def ingestion_pipeline():
         forex_symbols,
         futures_symbols,
         indices_symbols, 
-        file_path
+        file_path,
+        file_path_actors
         ]
     populate_tasks >> end()
 

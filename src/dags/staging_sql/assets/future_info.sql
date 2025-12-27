@@ -1,13 +1,12 @@
-DROP TABLE IF EXISTS future_info;
+DROP TABLE IF EXISTS  staging.future_info;
 
-CREATE TABLE future_info AS (
+CREATE TABLE staging.future_info AS (
     SELECT
         'future_' || fe.symbol || '_info' AS future_id,
         fe.symbol as symbol,
-        fe.futures_name as futures_name,
+        REGEXP_REPLACE(fe.futures_name, '[, ]*[A-Za-z]{3}([- ]\d{2,4}|-)$', '', 'i') as futures_name,
         fe.region as region,
         fe.currency as currency,
         fe.exchange_timezone as exchange_timezone
-    FROM
-        FUTURES_EXCHANGE fe
+    FROM raw.FUTURES_EXCHANGE fe
 );

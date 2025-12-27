@@ -1,12 +1,13 @@
-DROP TABLE IF EXISTS forex_value;
+DROP TABLE IF EXISTS  staging.forex_value;
 
-CREATE TABLE forex_value AS (
+CREATE TABLE staging.forex_value AS (
     SELECT
-        'forex_' || fv.symbol || '_value' AS forex_id,
-        fv.value_timestamp AS "timestamp",
-        fv.value_open,
-        fv.value_high,
-        fv.value_low,
-        fv.value_close
-    FROM FOREX_HISTORY fv
+        'forex_' || hs.symbol || '_value' AS forex_id,
+        TO_TIMESTAMP(hs.value_timestamp::INT) AT TIME ZONE c.exchange_timezone AS "timestamp",
+        hs.value_open,
+        hs.value_high,
+        hs.value_low,
+        hs.value_close
+    FROM raw.FOREX_HISTORY hs
+    JOIN staging.forex_info c ON c.symbol = hs.symbol
 );

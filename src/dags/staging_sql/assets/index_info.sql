@@ -1,6 +1,6 @@
-DROP TABLE IF EXISTS index_info;
+DROP TABLE IF EXISTS  staging.index_info;
 
-CREATE TABLE index_info AS (
+CREATE TABLE staging.index_info AS (
     SELECT
         'index_' || i.symbol || '_info' AS index_id,
         i.symbol,
@@ -8,5 +8,6 @@ CREATE TABLE index_info AS (
         i.region,
         i.index_name,
         i.exchange_timezone
-    FROM INDEX_EXCHANGE i
+    FROM raw.INDEX_EXCHANGE i
+    WHERE LENGTH(REPLACE(i.currency, ' ', '')) > 0
 );

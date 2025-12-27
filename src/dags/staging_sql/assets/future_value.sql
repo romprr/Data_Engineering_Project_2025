@@ -1,13 +1,14 @@
-DROP TABLE IF EXISTS future_value;
+DROP TABLE IF EXISTS  staging.future_value;
 
-CREATE TABLE future_value AS (
+CREATE TABLE staging.future_value AS (
     SELECT
-        'future_' || fv.symbol || '_value' AS future_id,
-        fv.value_timestamp AS "timestamp",
-        fv.value_open,
-        fv.value_high,
-        fv.value_low,
-        fv.value_close,
-        fv.volume
-    FROM FUTURES_HISTORY fv
+        'future_' || hs.symbol || '_value' AS future_id,
+        TO_TIMESTAMP(hs.value_timestamp::INT) AT TIME ZONE c.exchange_timezone AS "timestamp",
+        hs.value_open,
+        hs.value_high,
+        hs.value_low,
+        hs.value_close,
+        hs.volume
+    FROM raw.FUTURES_HISTORY hs
+    JOIN staging.future_info c ON c.symbol = hs.symbol
 );
