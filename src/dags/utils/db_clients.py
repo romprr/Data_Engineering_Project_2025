@@ -2,6 +2,7 @@ import os
 import time
 import psycopg2
 from psycopg2.extras import execute_values
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from dataclasses import dataclass
 
 @dataclass
@@ -21,6 +22,13 @@ class PGQueries() :
         # For the file (ucdp) we will very probably only run a PGSQL query (with the operator) to load the file.
         # The file will be transformed before with pandas to fit the table
 
+def create_sql_operator(task_id : str, sql_file_name : str, dag_path : str = None) -> SQLExecuteQueryOperator :
+    print(f"SQL PATH : {os.getenv('SQL_PRODUCTION_FOLDER')}")
+    return SQLExecuteQueryOperator(
+        task_id=task_id,
+        conn_id="postgres",
+        sql=os.path.join(dag_path, sql_file_name) if dag_path != None  else sql_file_name
+    )
 
 class PGDriver() :
 

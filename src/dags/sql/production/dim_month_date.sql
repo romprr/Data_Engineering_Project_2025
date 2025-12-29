@@ -11,6 +11,10 @@ CREATE TABLE production.dim_month_date AS (
             SELECT "date" as t FROM staging.future_value
             UNION ALL
             SELECT "date" as t FROM staging.crypto_value
+            UNION ALL
+            SELECT episode_start AS t FROM staging.ucdp_episode
+			UNION ALL
+			SELECT start_date as t FROM staging.ucdp_conflict
         ) subquery
     )
     SELECT 
@@ -23,5 +27,5 @@ CREATE TABLE production.dim_month_date AS (
         (SELECT DATE_TRUNC('month', first_ts - INTERVAL '1 month') FROM start_date_cte)::date,  -- Start Date
         DATE_TRUNC('month', CURRENT_DATE)::date,  -- End Date
         '1 month'            -- Interval
-    ) AS d;
+    ) AS d
 )

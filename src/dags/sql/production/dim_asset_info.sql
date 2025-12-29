@@ -1,6 +1,6 @@
 DROP TABLE IF EXISTS production.dim_asset_info;
 
-CREATE TABLE production.dim_asset_info (
+CREATE TABLE production.dim_asset_info AS (
     SELECT
         crypto_id as asset_id,
         symbol,
@@ -12,7 +12,7 @@ CREATE TABLE production.dim_asset_info (
         'crypto' as asset_type
     FROM staging.crypto_info
 
-    UNION
+    UNION ALL
 
     SELECT
         forex_id as asset_id,
@@ -25,7 +25,7 @@ CREATE TABLE production.dim_asset_info (
         'forex' as asset_type
     FROM staging.forex_info
 
-    UNION 
+    UNION ALL
 
     SELECT
         index_id as asset_id,
@@ -38,7 +38,7 @@ CREATE TABLE production.dim_asset_info (
         'index' as asset_type
     FROM staging.index_info
 
-    UNION
+    UNION ALL
 
     SELECT
         future_id as asset_id,

@@ -12,6 +12,7 @@ CREATE TABLE production.fact_asset_value AS (
         NULL::NUMERIC as dividends
     FROM staging.forex_value v
     JOIN production.dim_month_date d ON d.month_date = v.date
+    JOIN production.dim_asset_info ai ON ai.asset_id = v.forex_id
     
     UNION ALL
 
@@ -26,6 +27,7 @@ CREATE TABLE production.fact_asset_value AS (
         NULL as dividends
     FROM staging.future_value v
     JOIN production.dim_month_date d ON d.month_date = v.date
+    JOIN production.dim_asset_info ai ON ai.asset_id = v.future_id
 
     UNION ALL
 
@@ -40,6 +42,7 @@ CREATE TABLE production.fact_asset_value AS (
         v.dividends as dividends
     FROM staging.index_value v
     JOIN production.dim_month_date d ON d.month_date = v.date
+    JOIN production.dim_asset_info ai ON ai.asset_id = v.index_id
 
     UNION ALL
 
@@ -54,4 +57,5 @@ CREATE TABLE production.fact_asset_value AS (
         NULL as dividends
     FROM staging.crypto_value v
     JOIN production.dim_month_date d ON d.month_date = v.date
+    JOIN production.dim_asset_info ai ON ai.asset_id = v.crypto_id
 )
