@@ -298,29 +298,29 @@ def staging_pipeline() :
         sql_file_name="ucdp_side.sql"
     )
 
-    clean_locations = create_sql_operator(
-        task_id="clean_location",
-        dag_path=SQL_UCDP_PATH,
-        sql_file_name="ucdp_location.sql"
-    )
+    # clean_locations = create_sql_operator(
+    #     task_id="clean_location",
+    #     dag_path=SQL_UCDP_PATH,
+    #     sql_file_name="ucdp_location.sql"
+    # )
 
-    clean_conflict_locations = create_sql_operator(
-        task_id="clean_ucdp_conflict_location",
-        dag_path=SQL_UCDP_PATH,
-        sql_file_name="ucdp_conflicts_location.sql"
-    )
+    # clean_conflict_locations = create_sql_operator(
+    #     task_id="clean_ucdp_conflict_location",
+    #     dag_path=SQL_UCDP_PATH,
+    #     sql_file_name="ucdp_conflicts_location.sql"
+    # )
 
-    clean_region = create_sql_operator(
-        task_id="clean_ucdp_region",
-        dag_path=SQL_UCDP_PATH,
-        sql_file_name="ucdp_region.sql"
-    )
+    # clean_region = create_sql_operator(
+    #     task_id="clean_ucdp_region",
+    #     dag_path=SQL_UCDP_PATH,
+    #     sql_file_name="ucdp_region.sql"
+    # )
 
-    clean_conflict_regions = create_sql_operator(
-        task_id="clean_ucd_conflicts_region",
-        dag_path=SQL_UCDP_PATH,
-        sql_file_name="ucdp_conflicts_region.sql"
-    )
+    # clean_conflict_regions = create_sql_operator(
+    #     task_id="clean_ucd_conflicts_region",
+    #     dag_path=SQL_UCDP_PATH,
+    #     sql_file_name="ucdp_conflicts_region.sql"
+    # )
 
     clean_actors = create_sql_operator(
         task_id="clean_ucdp_actors",
@@ -406,17 +406,18 @@ CSV HEADER;
     load_index_infos >> load_index_history >> clean_index_infos >> clean_index_values
     load_crypto_infos >> load_crypto_history >> clean_crypto_infos >> clean_crypto_values
     load_forex_infos >> load_forex_history >> clean_forex_infos >> clean_forex_values
-    [load_ucdp_conflicts, load_ucdp_actors] >> clean_conflicts >> clean_episodes >> clean_actors >> clean_side >> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
+    [load_ucdp_conflicts, load_ucdp_actors] >> clean_conflicts >> clean_episodes >> clean_actors >> clean_side #>> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
     
     [
         clean_futures_values, 
         clean_index_values, 
         clean_crypto_values, 
         clean_forex_values,
-        clean_locations, 
-        clean_region, 
-        clean_conflict_locations, 
-        clean_conflict_regions 
+        clean_side,
+        # clean_locations, 
+        # clean_region, 
+        # clean_conflict_locations, 
+        # clean_conflict_regions 
     ] >> end()
 
 staging_pipeline()
