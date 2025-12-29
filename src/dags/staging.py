@@ -38,7 +38,7 @@ POSTGRES_CRED_DB=os.getenv('POSTGRES_DB')
 # Env variables specific to staging
 REDIS_2_URI = os.getenv("REDIS_2_URI")
 
-DAG_PATH = os.path.dirname(os.path.abspath(__file__))
+SQL_FOLDER = os.getenv("SQL_STAGING_FOLDER")
 
 SQL_ASSETS_PATH = 'assets'
 SQL_UCDP_PATH = 'ucdp'
@@ -68,7 +68,7 @@ default_args = {
     description="The pipeline that will transform and clean the data into usable information.",
     catchup=False,
     tags=["staging"],
-    template_searchpath=['/opt/airflow/dags/staging_sql/']
+    template_searchpath=[f'/opt/airflow/dags/{SQL_FOLDER}/']
 )
 
 def staging_pipeline() :

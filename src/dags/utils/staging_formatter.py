@@ -24,7 +24,6 @@ class AssetInfosFormatters :
         return pd.DataFrame([data_struct])
 
     def format_index_infos(data) :
-
         name_key = 'longName' if 'longName' in data.keys() else 'shortName'
 
         currency = None
@@ -43,8 +42,6 @@ class AssetInfosFormatters :
 
 
     def format_futures_infos(data) :
-        print(f"FUTURES DATA  {data}")
-        
         if 'shortName' in data.keys() :
             name_key = 'shortName'
         elif 'longName' in data.keys() :
