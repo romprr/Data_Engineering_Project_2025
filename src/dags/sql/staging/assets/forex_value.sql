@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS  staging.forex_value;
 CREATE TABLE staging.forex_value AS (
     SELECT
         'forex_' || hs.symbol || '_value' AS forex_id,
-        TO_TIMESTAMP(hs.value_timestamp::INT) AT TIME ZONE c.exchange_timezone AS "timestamp",
+        TO_TIMESTAMP(hs.value_timestamp::INT)::DATE AS "date",
         hs.value_open,
         hs.value_high,
         hs.value_low,
