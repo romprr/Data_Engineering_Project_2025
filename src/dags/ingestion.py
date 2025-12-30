@@ -26,6 +26,7 @@ FUTURES_SYMBOLS_SCRAPER_URL = os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
 FOREX_SYMBOLS_SCRAPER_URL = os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 WORLDWIDE_EVENTS_CSV_FILE_URL = os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
 WORLDWIDE_ACTORS_CSV_FILE_URL = os.getenv("WORLDWIDE_ACTORS_CSV_FILE_URL")
+WORLDWIDE_GEOREFERENCE_CSV_FILE_URL = os.getenv("WORLDWIDE_GEOREFERENCE_CSV_FILE_URL")
 SHARED_FOLDER_PATH_AIRFLOW = os.getenv("SHARED_FOLDER_PATH_AIRFLOW")
 MONGO_DB_INGESTION_COLLECTION = os.getenv("MONGO_DB_INGESTION_COLLECTION")
 MONGO_DB_INGESTION_DATABASE = os.getenv("MONGO_DB_INGESTION_DATABASE")
@@ -259,8 +260,11 @@ def ingestion_pipeline():
     # CSV FILE DOWNLOAD AND EXTRACTION
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
     file_path_actors = download_file(URL=WORLDWIDE_ACTORS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
+    file_path_geo = download_file(URL=WORLDWIDE_GEOREFERENCE_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
+
     extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
     extracted_metadata_actors = unzip_file(data_type="worldwide_actors", zip_file_path=file_path_actors, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    extracted_metadata_geo = unzip_file(data_type="worldwide_geo", zip_file_path=file_path_geo, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     populate_tasks = [
         populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata),
@@ -272,7 +276,8 @@ def ingestion_pipeline():
         populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata),
         populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata),
         populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata),
-        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata_actors)
+        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata_actors),
+        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata_geo)
     ]
 
     # TASK DEPENDENCIES
@@ -282,7 +287,8 @@ def ingestion_pipeline():
         futures_symbols,
         indices_symbols, 
         file_path,
-        file_path_actors
+        file_path_actors,
+        file_path_geo
         ]
     populate_tasks >> end()
 

@@ -154,6 +154,7 @@ def staging_pipeline() :
 
         ucdp_yearly = []
         ucdp_actors = []
+        ucdp_geo = []
 
         redis_val = redisClient.read(queue_name)
         while redis_val != None :
@@ -161,13 +162,16 @@ def staging_pipeline() :
             data_type = json.loads(redis_val)["type"]
             if data_type == 'worldwide_events' :
                 ucdp_yearly.append(data)
-            else :
+            elif data_type == 'worldwide_actors' :
                 ucdp_actors.append(data)
+            else :
+                ucdp_geo.append(data)
             redis_val = redisClient.read(queue_name)
         
         return {
             "ucdp_yearly" : ucdp_yearly,
-            "ucdp_actors" : ucdp_actors
+            "ucdp_actors" : ucdp_actors,
+            "ucdp_geo" : ucdp_geo
         }
 
     
@@ -209,15 +213,32 @@ def staging_pipeline() :
         df = pd.read_csv(file_path, sep=',')
 
         df = df[
-            ['ActorId', 'NameData', 'NameOrigFull', 'ConflictId']
+            ['ActorId', 'NameData', 'NameOrigFull', 'ConflictId', "Org"]
         ]
 
         df = df.rename(columns={
             "ActorId" : "actor_id",
             "NameData" : "actor_name",
             "NameOrigFull" : "actor_og_name",
-            "ConflictId" : "conflict_ids"
+            "ConflictId" : "conflict_ids",
+            "Org" : "org_level"
         })
+
+        df.to_csv(file_path, index=False, na_rep='')
+
+        f_path = file_path.rsplit('/',1)[-1]
+
+        return {
+            "file_path" : f'{SHARED_FOLDER_PATH_POSTGRES}/{f_path}'
+        }
+    
+    @task
+    def transform_ucdp_geo(file_path) :
+        df = pd.read_csv(file_path, sep=',')
+
+        df = df[
+            ['id', 'conflict_new_id', 'country', 'region']
+        ]
 
         df.to_csv(file_path, index=False, na_rep='')
 
@@ -298,6 +319,12 @@ def staging_pipeline() :
         sql_file_name="ucdp_side.sql"
     )
 
+    clean_geo = create_sql_operator(
+        task_id = "clean_geo",
+        dag_path=SQL_UCDP_PATH,
+        sql_file_name="ucdp_georeference.sql"
+    )
+
     # clean_locations = create_sql_operator(
     #     task_id="clean_location",
     #     dag_path=SQL_UCDP_PATH,
@@ -336,6 +363,10 @@ def staging_pipeline() :
     def get_actor_files(all_files):
         return all_files["ucdp_actors"]
 
+    @task
+    def get_geo_files(all_files) :
+        return all_files['ucdp_geo']
+
     # @task
     # def populate_redis_queue(data, queue_name) :
     #     pass
@@ -366,9 +397,11 @@ def staging_pipeline() :
 
     conflict_list = get_yearly_files(files)
     actors_list = get_actor_files(files)
+    geo_list = get_geo_files(files)
 
     ucdp_conflict_path = transform_ucdp_yearly.expand(file_path=conflict_list)
     ucdp_actors_path = transform_ucdp_actors.expand(file_path=actors_list)
+    ucdp_geo_path = transform_ucdp_geo.expand(file_path=geo_list)
 
 
     load_ucdp_conflicts = SQLExecuteQueryOperator.partial(
@@ -401,12 +434,27 @@ CSV HEADER;
         parameters=ucdp_actors_path
     )
 
+    load_ucdp_geo = SQLExecuteQueryOperator.partial(
+        task_id="load_ucdp_geo",
+        conn_id="postgres",
+        sql="""
+TRUNCATE TABLE raw.UCDP_GEOREFERENCE;
+
+COPY raw.UCDP_GEOREFERENCE
+FROM %(file_path)s
+DELIMITER ','
+CSV HEADER;
+"""
+    ).expand(
+        parameters=ucdp_geo_path
+    )
+
 
     load_futures_infos >> load_futures_history >> clean_futures_infos >> clean_futures_values
     load_index_infos >> load_index_history >> clean_index_infos >> clean_index_values
     load_crypto_infos >> load_crypto_history >> clean_crypto_infos >> clean_crypto_values
     load_forex_infos >> load_forex_history >> clean_forex_infos >> clean_forex_values
-    [load_ucdp_conflicts, load_ucdp_actors] >> clean_conflicts >> clean_episodes >> clean_actors >> clean_side #>> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
+    [load_ucdp_conflicts, load_ucdp_actors, load_ucdp_geo] >> clean_conflicts >> clean_geo >> clean_episodes >> clean_actors >> clean_side #>> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
     
     [
         clean_futures_values, 

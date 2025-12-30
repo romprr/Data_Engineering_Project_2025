@@ -148,7 +148,16 @@ CREATE TABLE raw.UCDP_ACTORS(
     actor_name TEXT,
     actor_og_name TEXT,
     conflict_ids TEXT,
+    org_level INT,
     PRIMARY KEY (actor_id)
+);
+
+CREATE TABLE raw.UCDP_GEOREFERENCE(
+    "id" INT,
+    conflict_new_id INT,
+    country TEXT,
+    region TEXT,
+    PRIMARY KEY (id)
 );
 
 -- Permissions
