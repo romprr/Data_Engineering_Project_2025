@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS  staging.index_info;
 
 CREATE TABLE staging.index_info AS (
     SELECT
-        'index_' || i.symbol || '_info' AS index_id,
+        'index_' || i.symbol || '_asset' AS index_id,
         i.symbol,
         i.currency,
         i.region,

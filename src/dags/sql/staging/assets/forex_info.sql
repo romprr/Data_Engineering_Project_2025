@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS  staging.forex_info;
 
 CREATE TABLE staging.forex_info AS (
     SELECT
-        'forex_' || f.symbol || '_info' AS forex_id,
+        'forex_' || f.symbol || '_asset' AS forex_id,
         f.symbol as symbol,
         f.forex_name as forex_name,
         SPLIT_PART(f.forex_name, '/', 1) as from_currency,

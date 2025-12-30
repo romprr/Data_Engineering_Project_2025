@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS  staging.index_value;
 
 CREATE TABLE staging.index_value AS (
     SELECT
-        'index_' || hs.symbol || '_value' AS index_id,
+        'index_' || hs.symbol || '_asset' AS index_id,
         TO_TIMESTAMP(hs.value_timestamp::INT) AT TIME ZONE c.exchange_timezone AS "date",
         hs.value_open,
         hs.value_high,

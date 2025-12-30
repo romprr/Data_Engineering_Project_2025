@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS  staging.crypto_value;
 
 CREATE TABLE staging.crypto_value AS (
     SELECT
-        'crypto_' || hs.symbol || '_value' AS crypto_id,
+        'crypto_' || hs.symbol || '_asset' AS crypto_id,
         TO_TIMESTAMP(hs.value_timestamp::INT)::DATE AS "date",
         hs.value_open,
         hs.value_high,
