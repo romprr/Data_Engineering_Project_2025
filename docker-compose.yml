@@ -85,8 +85,8 @@ services:
   streamlit:
     container_name: streamlit-webapp
     build:
-      context: ./docker/streamlit
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/streamlit/Dockerfile
     ports:
       - "8501:8501"
     volumes:
