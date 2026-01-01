@@ -9,6 +9,7 @@ import os
 import logging
 import requests
 import json
+import socket
 import zipfile
 
 # =========================
@@ -63,10 +64,29 @@ default_args = {
 def ingestion_pipeline():
     """Ingestion DAG to extract data from various sources and load into MongoDB"""
 
-    @task 
+    @task.branch
     def start():
-        """Empty start task"""
+        """Start of the dag, checks if the dag will run in online or offline."""
         print("Starting the ingestion pipeline...")
+        try:
+            socket.setdefaulttimeout(10)
+            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
+            print("Internet connection available.")
+            return "is_online"
+        except Exception as ex:
+            print(f"No internet connection: {ex}")
+            return "is_offline"
+  
+    @task(task_id="is_online")
+    def is_online():
+        """Empty task to start online mode"""
+        print("Running in online mode.")
+
+    
+    @task(task_id="is_offline") 
+    def is_offline():
+        """Empty task to start offline mode"""
+        print("Running in offline mode.")
 
     @task
     def chunk_list(symbols, chunk_size):
@@ -228,6 +248,8 @@ def ingestion_pipeline():
         """Empty end task"""
         print("Ingestion pipeline completed")
     
+    # TASK DEPENDENCIES
+    # ONLINE
     # SYMBOLS EXTRACTION
     crypto_symbols = get_asset_symbols("crypto", URL=None)
     forex_symbols = get_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
@@ -255,6 +277,23 @@ def ingestion_pipeline():
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
     extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
+    # OFFLINE 
+
+    # BRANCHING
+    online = is_online()
+    offline = is_offline()
+
+    online_extraction = [ 
+        crypto_symbols,
+        forex_symbols,
+        futures_symbols,
+        indices_symbols, 
+        file_path
+        ] 
+    
+    offline_extraction = [
+
+    ]
     populate_tasks = [
         populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata),
         populate_redis_queue.partial(queue_name=FOREX_INFO_QUEUE).expand(data=forex_info_metadata),
@@ -266,15 +305,9 @@ def ingestion_pipeline():
         populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata),
         populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata)
     ]
+    
+    start() >> [online, offline]
 
-    # TASK DEPENDENCIES
-    start() >> [ 
-        crypto_symbols,
-        forex_symbols,
-        futures_symbols,
-        indices_symbols, 
-        file_path
-        ]
-    populate_tasks >> end()
-
+    online >> online_extraction >> populate_tasks >> end()
+    offline >> offline_extraction >> populate_tasks>>end()
 ingestion_pipeline()
