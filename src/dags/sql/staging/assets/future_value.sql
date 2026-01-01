@@ -8,7 +8,9 @@ CREATE TABLE staging.future_value AS (
         hs.value_high,
         hs.value_low,
         hs.value_close,
-        hs.volume
+        hs.volume,
+        c.region
     FROM raw.FUTURES_HISTORY hs
     JOIN staging.future_info c ON c.symbol = hs.symbol
+    JOIN staging.assets_region_translation rt ON rt.exchange_timezone = c.exchange_timezone
 );

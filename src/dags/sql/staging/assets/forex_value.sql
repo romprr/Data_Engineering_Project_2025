@@ -7,7 +7,9 @@ CREATE TABLE staging.forex_value AS (
         hs.value_open,
         hs.value_high,
         hs.value_low,
-        hs.value_close
+        hs.value_close,
+        rt.region
     FROM raw.FOREX_HISTORY hs
     JOIN staging.forex_info c ON c.symbol = hs.symbol
+    JOIN staging.assets_region_translation rt ON rt.exchange_timezone = c.exchange_timezone
 );
