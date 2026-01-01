@@ -69,8 +69,7 @@ def ingestion_pipeline():
         """Start of the dag, checks if the dag will run in online or offline."""
         print("Starting the ingestion pipeline...")
         try:
-            socket.setdefaulttimeout(10)
-            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
+            socket.create_connection(("1.1.1.1", 443), timeout=5)
             print("Internet connection available.")
             return "is_online"
         except Exception as ex:
@@ -181,6 +180,64 @@ def ingestion_pipeline():
         print(f"Completed fetching history for asset type: {asset_type}")
         return metadatas
     
+    @task
+    def get_asset_info_offline(asset_type, file_path):
+        """Placeholder for offline asset info retrieval."""
+        mongoClient = mongo.MongoDBClient(
+            uri=MONGO_DB_URI,
+            database=MONGO_DB_INGESTION_DATABASE,
+            collection=MONGO_DB_INGESTION_COLLECTION
+        )
+        mongoClient.connect()
+        metadatas = []
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            for item in data:
+                symbol = item.get("symbol", "unknown")
+                id = asset_type + "_" + symbol + "_info"
+                metadata = {
+                    "_id" : id,
+                    "type": asset_type,
+                    "extracted_at": datetime.now().isoformat(),                
+                }
+                metadatas.append(metadata)
+                doc = {
+                    **metadata,
+                    "data": item,
+                }
+                mongoClient.write(doc)
+        mongoClient.disconnect()
+        return metadatas
+    
+    @task
+    def get_asset_history_offline(asset_type, file_path):  
+        """Placeholder for offline asset history retrieval."""
+        mongoClient = mongo.MongoDBClient(
+            uri=MONGO_DB_URI,
+            database=MONGO_DB_INGESTION_DATABASE,
+            collection=MONGO_DB_INGESTION_COLLECTION
+        )
+        mongoClient.connect()
+        metadatas = []
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            for item in data:
+                symbol = item.get("symbol", "unknown")
+                id = asset_type + "_" + symbol + "_history"
+                metadata = {
+                    "_id" : id,
+                    "type": asset_type,
+                    "extracted_at": datetime.now().isoformat(),                
+                }
+                metadatas.append(metadata)
+                doc = {
+                    **metadata,
+                    "data": item,
+                }
+                mongoClient.write(doc)
+        mongoClient.disconnect()
+        return metadatas
+    
     @task 
     def populate_redis_queue(data, queue_name):
         """Pushing mongo document metadata into Redis queue for further processing."""
@@ -225,12 +282,7 @@ def ingestion_pipeline():
             zip_ref.extractall(extract_to_path)
             extracted_files = zip_ref.namelist()
         print(f"Extracted {zip_file_path} to {extract_to_path}")
-        # Delete the zip file after extraction
-        try:
-            os.remove(zip_file_path)
-            print(f"Deleted zip file: {zip_file_path}")
-        except Exception as e:
-            print(f"Failed to delete zip file: {zip_file_path}. Error: {e}")
+        
         # Return the absolute path of the first extracted file (or None if nothing extracted)
         if extracted_files:
             abs_path = os.path.abspath(os.path.join(extract_to_path, extracted_files[0]))
@@ -242,6 +294,16 @@ def ingestion_pipeline():
             }
         else:
             return None
+        
+    @task
+    def delete_file(file_path):
+        """Task to delete file after extraction"""
+        try:
+            os.remove(file_path)
+            print(f"Deleted zip file: {file_path}")
+        except Exception as e:
+            print(f"Failed to delete zip file: {file_path}. Error: {e}")
+            raise
     
     @task
     def end():
@@ -275,39 +337,64 @@ def ingestion_pipeline():
 
     # CSV FILE DOWNLOAD AND EXTRACTION
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
-    extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW) >> delete_file(file_path=file_path)
+    
 
     # OFFLINE 
+    # ASSET INFO AND HISTORY EXTRACTION
+    offline_crypto_info_metadata = get_asset_info_offline(asset_type="crypto", file_path="./offline/assets/info/cryptocurrencies.json")
+    offline_forex_info_metadata = get_asset_info_offline(asset_type="forex", file_path="./offline/assets/info/forex.json")
+    offline_futures_info_metadata = get_asset_info_offline(asset_type="futures", file_path="./offline/assets/info/futures.json")
+    offline_indices_info_metadata = get_asset_info_offline(asset_type="indices", file_path="./offline/assets/info/indices.json")   
+   
+    offline_crypto_history_metadata = get_asset_history_offline(asset_type="crypto", file_path="./offline/assets/history/cryptocurrencies.json")
+    offline_forex_history_metadata = get_asset_history_offline(asset_type="forex", file_path="./offline/assets/history/forex.json")
+    offline_futures_history_metadata = get_asset_history_offline(asset_type="futures", file_path="./offline/assets/history/futures.json")
+    offline_indices_history_metadata = get_asset_history_offline(asset_type="indices", file_path="./offline/assets/history/indices.json")
+    
+    offline_extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path="./offline/events/sample_ucdp_events.zip", extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     # BRANCHING
     online = is_online()
     offline = is_offline()
 
-    online_extraction = [ 
-        crypto_symbols,
-        forex_symbols,
-        futures_symbols,
-        indices_symbols, 
-        file_path
-        ] 
-    
-    offline_extraction = [
+    # POPULATE REDIS TASKS - ONLINE
+    populate_crypto_info = populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata)
+    populate_forex_info = populate_redis_queue.partial(queue_name=FOREX_INFO_QUEUE).expand(data=forex_info_metadata)
+    populate_futures_info = populate_redis_queue.partial(queue_name=FUTURES_INFO_QUEUE).expand(data=futures_info_metadata)
+    populate_indices_info = populate_redis_queue.partial(queue_name=INDICES_INFO_QUEUE).expand(data=indices_info_metadata)
+    populate_crypto_history = populate_redis_queue.partial(queue_name=CRYPTO_HISTORY_QUEUE).expand(data=crypto_history_metadata)
+    populate_forex_history = populate_redis_queue.partial(queue_name=FOREX_HISTORY_QUEUE).expand(data=forex_history_metadata)
+    populate_futures_history = populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata)
+    populate_indices_history = populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata)
+    populate_files = populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata)
 
-    ]
-    populate_tasks = [
-        populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata),
-        populate_redis_queue.partial(queue_name=FOREX_INFO_QUEUE).expand(data=forex_info_metadata),
-        populate_redis_queue.partial(queue_name=FUTURES_INFO_QUEUE).expand(data=futures_info_metadata),
-        populate_redis_queue.partial(queue_name=INDICES_INFO_QUEUE).expand(data=indices_info_metadata),
-        populate_redis_queue.partial(queue_name=CRYPTO_HISTORY_QUEUE).expand(data=crypto_history_metadata),
-        populate_redis_queue.partial(queue_name=FOREX_HISTORY_QUEUE).expand(data=forex_history_metadata),
-        populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata),
-        populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata),
-        populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata)
-    ]
-    
+    # POPULATE REDIS TASKS - OFFLINE
+    populate_offline_crypto_info = populate_redis_queue(queue_name=CRYPTO_INFO_QUEUE, data=offline_crypto_info_metadata)
+    populate_offline_forex_info = populate_redis_queue(queue_name=FOREX_INFO_QUEUE, data=offline_forex_info_metadata)
+    populate_offline_futures_info = populate_redis_queue(queue_name=FUTURES_INFO_QUEUE, data=offline_futures_info_metadata)
+    populate_offline_indices_info = populate_redis_queue(queue_name=INDICES_INFO_QUEUE, data=offline_indices_info_metadata)
+    populate_offline_crypto_history = populate_redis_queue(queue_name=CRYPTO_HISTORY_QUEUE, data=offline_crypto_history_metadata)
+    populate_offline_forex_history = populate_redis_queue(queue_name=FOREX_HISTORY_QUEUE, data=offline_forex_history_metadata)
+    populate_offline_futures_history = populate_redis_queue(queue_name=FUTURES_HISTORY_QUEUE, data=offline_futures_history_metadata)
+    populate_offline_indices_history = populate_redis_queue(queue_name=INDICES_HISTORY_QUEUE, data=offline_indices_history_metadata)
+    populate_offline_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_extracted_metadata)
+
+    # DEPENDENCIES
     start() >> [online, offline]
+    
+    # Online path
+    online >> [crypto_symbols, forex_symbols, futures_symbols, indices_symbols, file_path]
+    [populate_crypto_info, populate_forex_info, populate_futures_info, populate_indices_info,
+     populate_crypto_history, populate_forex_history, populate_futures_history, populate_indices_history,
+     populate_files] >> end()
+    
+    # Offline path
+    offline >> [offline_crypto_info_metadata, offline_forex_info_metadata, offline_futures_info_metadata, 
+                offline_indices_info_metadata, offline_crypto_history_metadata, offline_forex_history_metadata,
+                offline_futures_history_metadata, offline_indices_history_metadata, offline_extracted_metadata]
+    [populate_offline_crypto_info, populate_offline_forex_info, populate_offline_futures_info, 
+     populate_offline_indices_info, populate_offline_crypto_history, populate_offline_forex_history,
+     populate_offline_futures_history, populate_offline_indices_history, populate_offline_files] >> end()
 
-    online >> online_extraction >> populate_tasks >> end()
-    offline >> offline_extraction >> populate_tasks>>end()
 ingestion_pipeline()

@@ -4,4 +4,4 @@ data/
 metadata/
 *.DS_Store
 tester/
-TODO.mdshared_data/*
+shared_data/*.csv
