@@ -4,4 +4,5 @@ data/
 metadata/
 *.DS_Store
 tester/
-shared_data/*.csv
+shared_data/*
+!shared_data/.gitkeep

@@ -10,6 +10,7 @@ import logging
 import requests
 import json
 import socket
+import gc
 import zipfile
 
 # =========================
@@ -39,6 +40,31 @@ FOREX_HISTORY_QUEUE = os.getenv("FOREX_HISTORY_QUEUE")
 FUTURES_HISTORY_QUEUE = os.getenv("FUTURES_HISTORY_QUEUE")
 INDICES_HISTORY_QUEUE = os.getenv("INDICES_HISTORY_QUEUE")
 FILES_QUEUE = os.getenv("FILES_QUEUE")
+
+def build_metadata(symbol, asset_type, information_type):
+    """Build metadata dictionary for a given data."""
+    metadata = {
+        "_id" : f"{asset_type}_{symbol}_{information_type}",
+        "type": asset_type,
+        "symbol": symbol,
+        "information_type": information_type,
+        "extracted_at": datetime.now().isoformat(),
+    }
+    return metadata
+
+def get_mongo_client():
+    """Create and return a MongoDB client."""
+    mongoClient = mongo.MongoDBClient(
+        uri=MONGO_DB_URI,
+        database=MONGO_DB_INGESTION_DATABASE,
+        collection=MONGO_DB_INGESTION_COLLECTION
+    )
+    return mongoClient
+
+def get_redis_client():
+    """Create and return a Redis client."""
+    redisClient = redis.RedisClient(uri=REDIS_1_URI)
+    return redisClient
 
 # =========================
 # DAG DEFINITION
@@ -113,94 +139,67 @@ def ingestion_pipeline():
         return symbols
 
     @task
-    def get_asset_info(asset_type, symbols):
-        """Get asset info from yfinance and store in MongoDB. 
-        The MongoDB document ID is formatted as {asset_type}_{symbol}_info 
-        to be later pushed into redis with other metadata."""
+    def query_yfinance_info(asset_type, symbols):
         print(f"Fetching info for asset type: {asset_type}")
-        mongoClient = mongo.MongoDBClient(
-            uri=MONGO_DB_URI,
-            database=MONGO_DB_INGESTION_DATABASE,
-            collection=MONGO_DB_INGESTION_COLLECTION
-        )
+        mongoClient = get_mongo_client()
         mongoClient.connect()
         metadatas = []
         for symbol in symbols : 
             print(f"Fetching info for symbol: {symbol}")
             ticker = yf.Ticker(symbol)
-            info = ticker.info
-            info["symbol"] = symbol
-            id = asset_type + "_" + symbol + "_info"
-            metadata = {
-                "_id" : id,
-                "type": asset_type,
-                "extracted_at": datetime.now().isoformat(),                
-            }
+            data = ticker.info
+            data["symbol"] = symbol
+            metadata = build_metadata(symbol, asset_type, "info")
             metadatas.append(metadata)
             doc = {
                 **metadata,
-                "data": info,
+                "data": data,
             }
             mongoClient.write(doc)
+            del ticker, data, doc
+            gc.collect()
         mongoClient.disconnect()
         print(f"Completed fetching info for asset type: {asset_type}")
         return metadatas
-
+    
     @task
-    def get_asset_history(asset_type, symbols):
-        """Get asset historical data from yfinance and store in MongoDB. 
-        The MongoDB document ID is formatted as {asset_type}_{symbol}_history
-        to be later pushed into redis with other metadata."""
+    def query_yfinance_history(asset_type, symbols):
         print(f"Fetching history for asset type: {asset_type}")
-        mongoClient = mongo.MongoDBClient(
-            uri=MONGO_DB_URI,
-            database=MONGO_DB_INGESTION_DATABASE,
-            collection=MONGO_DB_INGESTION_COLLECTION
-        )
+        mongoClient = get_mongo_client()
         mongoClient.connect()
         metadatas = []
         for symbol in symbols : 
+            print(f"Fetching history for symbol: {symbol}")
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period=f"{20*12}mo", interval="1mo") 
-            hist = hist.reset_index()
-            hist = json.loads(hist.to_json(orient="records", date_format="epoch", date_unit="s"))
-            id = asset_type + "_" + symbol + "_history"
-            metadata = {
-                "_id" : id,
-                "type": asset_type,
-                "extracted_at": datetime.now().isoformat(),
-            }
+            data = ticker.history(period=f"{20*12}mo", interval="1mo") 
+            data = data.reset_index()
+            data = json.loads(data.to_json(orient="records", date_format="epoch", date_unit="s"))
+            metadata = build_metadata(symbol, asset_type, "history")
             metadatas.append(metadata)
             doc = {
                 **metadata,
-                "data": hist,
+                "data": data,
             }
             mongoClient.write(doc)
+            del ticker, data, doc
+            gc.collect()
         mongoClient.disconnect()
         print(f"Completed fetching history for asset type: {asset_type}")
         return metadatas
     
     @task
-    def get_asset_info_offline(asset_type, file_path):
-        """Placeholder for offline asset info retrieval."""
-        mongoClient = mongo.MongoDBClient(
-            uri=MONGO_DB_URI,
-            database=MONGO_DB_INGESTION_DATABASE,
-            collection=MONGO_DB_INGESTION_COLLECTION
-        )
+    def read_asset_files(asset_type, information_type, file_path):
+        mongoClient = get_mongo_client()
         mongoClient.connect()
         metadatas = []
         with open(file_path, 'r') as f:
             data = json.load(f)
             for item in data:
-                symbol = item.get("symbol", "unknown")
-                id = asset_type + "_" + symbol + "_info"
-                metadata = {
-                    "_id" : id,
-                    "type": asset_type,
-                    "extracted_at": datetime.now().isoformat(),                
-                }
+                symbol = item.get("symbol")
+                metadata = build_metadata(symbol, asset_type, information_type)
                 metadatas.append(metadata)
+                if information_type == "history": 
+                    item = item.get("history")
                 doc = {
                     **metadata,
                     "data": item,
@@ -208,41 +207,13 @@ def ingestion_pipeline():
                 mongoClient.write(doc)
         mongoClient.disconnect()
         return metadatas
-    
-    @task
-    def get_asset_history_offline(asset_type, file_path):  
-        """Placeholder for offline asset history retrieval."""
-        mongoClient = mongo.MongoDBClient(
-            uri=MONGO_DB_URI,
-            database=MONGO_DB_INGESTION_DATABASE,
-            collection=MONGO_DB_INGESTION_COLLECTION
-        )
-        mongoClient.connect()
-        metadatas = []
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-            for item in data:
-                symbol = item.get("symbol", "unknown")
-                id = asset_type + "_" + symbol + "_history"
-                metadata = {
-                    "_id" : id,
-                    "type": asset_type,
-                    "extracted_at": datetime.now().isoformat(),                
-                }
-                metadatas.append(metadata)
-                doc = {
-                    **metadata,
-                    "data": item,
-                }
-                mongoClient.write(doc)
-        mongoClient.disconnect()
-        return metadatas
-    
+
     @task 
     def populate_redis_queue(data, queue_name):
         """Pushing mongo document metadata into Redis queue for further processing."""
         print(f"Pushing data into Redis queue: {queue_name}")
-        redisClient = redis.RedisClient(uri=REDIS_1_URI)
+        print(f"Data to push: {data}")
+        redisClient = get_redis_client()
         redisClient.connect()
         if isinstance(data, (list, tuple, set)):
             for metadata in data:
@@ -295,15 +266,15 @@ def ingestion_pipeline():
         else:
             return None
         
-    @task
-    def delete_file(file_path):
-        """Task to delete file after extraction"""
-        try:
-            os.remove(file_path)
-            print(f"Deleted zip file: {file_path}")
-        except Exception as e:
-            print(f"Failed to delete zip file: {file_path}. Error: {e}")
-            raise
+    # @task
+    # def delete_file(file_path):
+    #     """Task to delete file after extraction"""
+    #     try:
+    #         os.remove(file_path)
+    #         print(f"Deleted zip file: {file_path}")
+    #     except Exception as e:
+    #         print(f"Failed to delete zip file: {file_path}. Error: {e}")
+    #         raise
     
     @task
     def end():
@@ -325,34 +296,34 @@ def ingestion_pipeline():
     indices_chunks = chunk_list(indices_symbols, 5)
 
     # ASSET INFO AND HISTORY EXTRACTION
-    crypto_info_metadata = get_asset_info.partial(asset_type="crypto").expand(symbols=crypto_chunks)
-    forex_info_metadata = get_asset_info.partial(asset_type="forex").expand(symbols=forex_chunks)
-    futures_info_metadata = get_asset_info.partial(asset_type="futures").expand(symbols=futures_chunks)
-    indices_info_metadata = get_asset_info.partial(asset_type="indices").expand(symbols=indices_chunks)
+    crypto_info_metadata = query_yfinance_info.partial(asset_type="crypto").expand(symbols=crypto_chunks)
+    forex_info_metadata = query_yfinance_info.partial(asset_type="forex").expand(symbols=forex_chunks)
+    futures_info_metadata = query_yfinance_info.partial(asset_type="futures").expand(symbols=futures_chunks)
+    indices_info_metadata = query_yfinance_info.partial(asset_type="indices").expand(symbols=indices_chunks)
 
-    crypto_history_metadata = get_asset_history.partial(asset_type="crypto").expand(symbols=crypto_chunks)
-    forex_history_metadata = get_asset_history.partial(asset_type="forex").expand(symbols=forex_chunks)
-    futures_history_metadata = get_asset_history.partial(asset_type="futures").expand(symbols=futures_chunks)
-    indices_history_metadata = get_asset_history.partial(asset_type="indices").expand(symbols=indices_chunks)
+    crypto_history_metadata = query_yfinance_history.partial(asset_type="crypto").expand(symbols=crypto_chunks)
+    forex_history_metadata = query_yfinance_history.partial(asset_type="forex").expand(symbols=forex_chunks)
+    futures_history_metadata = query_yfinance_history.partial(asset_type="futures").expand(symbols=futures_chunks)
+    indices_history_metadata = query_yfinance_history.partial(asset_type="indices").expand(symbols=indices_chunks)
 
     # CSV FILE DOWNLOAD AND EXTRACTION
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
-    extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW) >> delete_file(file_path=file_path)
+    file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
     
 
     # OFFLINE 
     # ASSET INFO AND HISTORY EXTRACTION
-    offline_crypto_info_metadata = get_asset_info_offline(asset_type="crypto", file_path="./offline/assets/info/cryptocurrencies.json")
-    offline_forex_info_metadata = get_asset_info_offline(asset_type="forex", file_path="./offline/assets/info/forex.json")
-    offline_futures_info_metadata = get_asset_info_offline(asset_type="futures", file_path="./offline/assets/info/futures.json")
-    offline_indices_info_metadata = get_asset_info_offline(asset_type="indices", file_path="./offline/assets/info/indices.json")   
+    offline_crypto_info_metadata = read_asset_files(asset_type="crypto", information_type="info", file_path="./offline/assets/info/cryptocurrencies.json")
+    offline_forex_info_metadata = read_asset_files(asset_type="forex", information_type="info", file_path="./offline/assets/info/forex.json")
+    offline_futures_info_metadata = read_asset_files(asset_type="futures", information_type="info", file_path="./offline/assets/info/futures.json")
+    offline_indices_info_metadata = read_asset_files(asset_type="indices", information_type="info", file_path="./offline/assets/info/indices.json")   
    
-    offline_crypto_history_metadata = get_asset_history_offline(asset_type="crypto", file_path="./offline/assets/history/cryptocurrencies.json")
-    offline_forex_history_metadata = get_asset_history_offline(asset_type="forex", file_path="./offline/assets/history/forex.json")
-    offline_futures_history_metadata = get_asset_history_offline(asset_type="futures", file_path="./offline/assets/history/futures.json")
-    offline_indices_history_metadata = get_asset_history_offline(asset_type="indices", file_path="./offline/assets/history/indices.json")
+    offline_crypto_history_metadata = read_asset_files(asset_type="crypto", information_type="history", file_path="./offline/assets/history/cryptocurrencies.json")
+    offline_forex_history_metadata = read_asset_files(asset_type="forex", information_type="history", file_path="./offline/assets/history/forex.json")
+    offline_futures_history_metadata = read_asset_files(asset_type="futures", information_type="history", file_path="./offline/assets/history/futures.json")
+    offline_indices_history_metadata = read_asset_files(asset_type="indices", information_type="history", file_path="./offline/assets/history/indices.json")
     
-    offline_extracted_metadata = unzip_file(data_type="worldwide_events", zip_file_path="./offline/events/sample_ucdp_events.zip", extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    offline_file_metadata = unzip_file(data_type="worldwide_events", zip_file_path="./offline/events/sample_ucdp_events.zip", extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     # BRANCHING
     online = is_online()
@@ -367,7 +338,7 @@ def ingestion_pipeline():
     populate_forex_history = populate_redis_queue.partial(queue_name=FOREX_HISTORY_QUEUE).expand(data=forex_history_metadata)
     populate_futures_history = populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata)
     populate_indices_history = populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata)
-    populate_files = populate_redis_queue(queue_name=FILES_QUEUE, data=extracted_metadata)
+    populate_files = populate_redis_queue(queue_name=FILES_QUEUE, data=file_metadata)
 
     # POPULATE REDIS TASKS - OFFLINE
     populate_offline_crypto_info = populate_redis_queue(queue_name=CRYPTO_INFO_QUEUE, data=offline_crypto_info_metadata)
@@ -378,7 +349,7 @@ def ingestion_pipeline():
     populate_offline_forex_history = populate_redis_queue(queue_name=FOREX_HISTORY_QUEUE, data=offline_forex_history_metadata)
     populate_offline_futures_history = populate_redis_queue(queue_name=FUTURES_HISTORY_QUEUE, data=offline_futures_history_metadata)
     populate_offline_indices_history = populate_redis_queue(queue_name=INDICES_HISTORY_QUEUE, data=offline_indices_history_metadata)
-    populate_offline_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_extracted_metadata)
+    populate_offline_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_file_metadata)
 
     # DEPENDENCIES
     start() >> [online, offline]
@@ -392,7 +363,7 @@ def ingestion_pipeline():
     # Offline path
     offline >> [offline_crypto_info_metadata, offline_forex_info_metadata, offline_futures_info_metadata, 
                 offline_indices_info_metadata, offline_crypto_history_metadata, offline_forex_history_metadata,
-                offline_futures_history_metadata, offline_indices_history_metadata, offline_extracted_metadata]
+                offline_futures_history_metadata, offline_indices_history_metadata, offline_file_metadata]
     [populate_offline_crypto_info, populate_offline_forex_info, populate_offline_futures_info, 
      populate_offline_indices_info, populate_offline_crypto_history, populate_offline_forex_history,
      populate_offline_futures_history, populate_offline_indices_history, populate_offline_files] >> end()
