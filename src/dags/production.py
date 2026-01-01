@@ -84,6 +84,11 @@ def production_pipeline() :
         sql_file_name="bridge_episode_date.sql"
     )
 
+    load_region = create_sql_operator(
+        task_id="load_regions",
+        sql_file_name="dim_region.sql"
+    )
+
     @task()
     def end():
         print("Production pipeline ended")
@@ -93,13 +98,12 @@ def production_pipeline() :
         load_conflict_info, 
         load_conflict_actors,
         load_date_dimension,
-        load_episodes,
     ]
 
-    load_conflict_info >> load_episodes
+    [load_conflict_info, load_asset_info] >> load_region >> [load_episodes, load_asset_values] 
     [load_episodes, load_conflict_actors] >> load_sides
     [load_episodes, load_date_dimension] >> load_episode_date
-    [load_date_dimension, load_asset_info] >> load_asset_values
+    load_date_dimension >> load_asset_values
 
     [load_asset_values, load_sides, load_episode_date] >> end()
 

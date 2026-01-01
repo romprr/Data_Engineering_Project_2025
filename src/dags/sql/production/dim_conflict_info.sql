@@ -8,9 +8,7 @@ CREATE TABLE production.dim_conflict_info AS (
         uc.disputed_territory,
         uc.start_date,
         uc.locations as primary_parties_locations,
-        uc.regions as primary_parties_regions,
-
-
+        uc.regions as primary_parties_regions
     FROM staging.ucdp_conflict uc
 
 )
