@@ -299,6 +299,34 @@ def staging_pipeline() :
         sql_file_name="crypto_value.sql"
     )
 
+
+    # Clean dates
+
+    clean_futures_values_date = create_sql_operator(
+        task_id="clean_futures_values_date",
+        dag_path=SQL_ASSETS_PATH,
+        sql_file_name="future_clean_value.sql"
+    )
+
+    clean_crypto_values_date = create_sql_operator(
+        task_id="clean_crypto_values_date",
+        dag_path=SQL_ASSETS_PATH,
+        sql_file_name="crypto_clean_value.sql"
+    )
+
+    clean_forex_values_date = create_sql_operator(
+        task_id="clean_forex_values_date",
+        dag_path=SQL_ASSETS_PATH,
+        sql_file_name="forex_clean_value.sql"
+    )
+
+    clean_index_values_date = create_sql_operator(
+        task_id="clean_index_values_date",
+        dag_path=SQL_ASSETS_PATH,
+        sql_file_name="index_clean_value.sql"
+    )
+
+
     # UCDP
 
     clean_conflicts = create_sql_operator(
@@ -462,11 +490,16 @@ CSV HEADER;
     load_forex_infos >> translate_region_timezones >> load_forex_history >> clean_forex_infos >> clean_forex_values
     [load_ucdp_conflicts, load_ucdp_actors, load_ucdp_geo] >> clean_conflicts >> clean_geo >> clean_episodes >> clean_actors >> clean_side #>> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
     
+
+    clean_forex_values >> clean_forex_values_date
+    clean_futures_values >> clean_futures_values_date
+    clean_index_values >> clean_index_values_date
+    clean_crypto_values >> clean_crypto_values_date
     [
-        clean_futures_values, 
-        clean_index_values, 
-        clean_crypto_values, 
-        clean_forex_values,
+        clean_futures_values_date, 
+        clean_index_values_date, 
+        clean_crypto_values_date, 
+        clean_forex_values_date,
         clean_side,
         # clean_locations, 
         # clean_region, 
