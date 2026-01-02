@@ -22,11 +22,25 @@ logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 # =========================
 # ENV VARIABLES IMPORTS
 # ========================= 
+# URLS
 INDICES_SYMBOLS_SCRAPER_URL = os.getenv("INDICES_SYMBOLS_SCRAPER_URL")
 FUTURES_SYMBOLS_SCRAPER_URL = os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
 FOREX_SYMBOLS_SCRAPER_URL = os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 WORLDWIDE_EVENTS_CSV_FILE_URL = os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
+
+# PATHS
 SHARED_FOLDER_PATH_AIRFLOW = os.getenv("SHARED_FOLDER_PATH_AIRFLOW")
+OFFLINE_CRYPTOCURRENCIES_INFO=os.getenv("OFFLINE_CRYPTOCURRENCIES_INFO")
+OFFLINE_FOREX_INFO=os.getenv("OFFLINE_FOREX_INFO")
+OFFLINE_FUTURES_INFO=os.getenv("OFFLINE_FUTURES_INFO")
+OFFLINE_INDICES_INFO=os.getenv("OFFLINE_INDICES_INFO")
+OFFLINE_CRYPTOCURRENCIES_HISTORY=os.getenv("OFFLINE_CRYPTOCURRENCIES_HISTORY")
+OFFLINE_FOREX_HISTORY=os.getenv("OFFLINE_FOREX_HISTORY")
+OFFLINE_FUTURES_HISTORY=os.getenv("OFFLINE_FUTURES_HISTORY")
+OFFLINE_INDICES_HISTORY=os.getenv("OFFLINE_INDICES_HISTORY")
+OFFLINE_WORLDWIDE_EVENTS=os.getenv("OFFLINE_WORLDWIDE_EVENTS")
+
+# DATABASES AND QUEUES 
 MONGO_DB_INGESTION_COLLECTION = os.getenv("MONGO_DB_INGESTION_COLLECTION")
 MONGO_DB_INGESTION_DATABASE = os.getenv("MONGO_DB_INGESTION_DATABASE")
 MONGO_DB_URI = os.getenv("MONGO_DB_URI")
@@ -41,18 +55,13 @@ FUTURES_HISTORY_QUEUE = os.getenv("FUTURES_HISTORY_QUEUE")
 INDICES_HISTORY_QUEUE = os.getenv("INDICES_HISTORY_QUEUE")
 FILES_QUEUE = os.getenv("FILES_QUEUE")
 
-OFFLINE_CRYPTOCURRENCIES_INFO=os.getenv("OFFLINE_CRYPTOCURRENCIES_INFO")
-OFFLINE_FOREX_INFO=os.getenv("OFFLINE_FOREX_INFO")
-OFFLINE_FUTURES_INFO=os.getenv("OFFLINE_FUTURES_INFO")
-OFFLINE_INDICES_INFO=os.getenv("OFFLINE_INDICES_INFO")
-OFFLINE_CRYPTOCURRENCIES_HISTORY=os.getenv("OFFLINE_CRYPTOCURRENCIES_HISTORY")
-OFFLINE_FOREX_HISTORY=os.getenv("OFFLINE_FOREX_HISTORY")
-OFFLINE_FUTURES_HISTORY=os.getenv("OFFLINE_FUTURES_HISTORY")
-OFFLINE_INDICES_HISTORY=os.getenv("OFFLINE_INDICES_HISTORY")
-OFFLINE_WORLDWIDE_EVENTS=os.getenv("OFFLINE_WORLDWIDE_EVENTS")
 
+# =========================
+# UTILS FUNCTIONS
+# =========================
 def build_metadata(symbol, asset_type, information_type):
-    """Build metadata dictionary for a given data."""
+    """Build metadata dictionary for an asset."""
+    print(f"Building metadata for {asset_type} - {symbol} - {information_type}")
     metadata = {
         "_id" : f"{asset_type}_{symbol}_{information_type}",
         "type": asset_type,
@@ -60,20 +69,25 @@ def build_metadata(symbol, asset_type, information_type):
         "information_type": information_type,
         "extracted_at": datetime.now().isoformat(),
     }
+    print(f"Built metadata: {metadata}")
     return metadata
 
 def get_mongo_client():
     """Create and return a MongoDB client."""
+    print("Creating MongoDB client...")
     mongoClient = mongo.MongoDBClient(
         uri=MONGO_DB_URI,
         database=MONGO_DB_INGESTION_DATABASE,
         collection=MONGO_DB_INGESTION_COLLECTION
     )
+    print("MongoDB client created.")
     return mongoClient
 
 def get_redis_client():
     """Create and return a Redis client."""
+    print("Creating Redis client...")
     redisClient = redis.RedisClient(uri=REDIS_1_URI)
+    print("Redis client created.")
     return redisClient
 
 # =========================
@@ -102,7 +116,7 @@ def ingestion_pipeline():
 
     @task.branch
     def start():
-        """Start of the dag, checks if the dag will run in online or offline."""
+        """Start of the dag, checks if the dag will run in online or offline mode."""
         print("Starting the ingestion pipeline...")
         try:
             socket.create_connection(("1.1.1.1", 443), timeout=5)
@@ -132,9 +146,9 @@ def ingestion_pipeline():
         ]
 
     @task
-    def get_asset_symbols(asset_type, URL):
+    def fetch_asset_symbols(asset_type, URL):
         """Scrapper to get the asset symbols from a given URL or hardcoded for crypto."""
-        print(f"Starting to get the {asset_type} symbols...")
+        print(f"Getting the {asset_type} symbols...")
         symbols = []
         if URL:
             print(f"Scrapping: {URL}")
@@ -150,12 +164,13 @@ def ingestion_pipeline():
 
     @task
     def query_yfinance_info(asset_type, symbols):
-        print(f"Fetching info for asset type: {asset_type}")
+        """Query yfinance for asset information and store in MongoDB."""
+        print(f"Fetching {asset_type} information...")
         mongoClient = get_mongo_client()
         mongoClient.connect()
         metadatas = []
         for symbol in symbols : 
-            print(f"Fetching info for symbol: {symbol}")
+            print(f"Fetching {symbol} information...")
             ticker = yf.Ticker(symbol)
             data = ticker.info
             data["symbol"] = symbol
@@ -169,19 +184,20 @@ def ingestion_pipeline():
             del ticker, data, doc
             gc.collect()
         mongoClient.disconnect()
-        print(f"Completed fetching info for asset type: {asset_type}")
+        print(f"Completed fetching {asset_type} information.")
         return metadatas
     
     @task
     def query_yfinance_history(asset_type, symbols):
-        print(f"Fetching history for asset type: {asset_type}")
+        """Query yfinance for asset historical data and store in MongoDB."""
+        print(f"Fetching {asset_type} historical data...")
         mongoClient = get_mongo_client()
         mongoClient.connect()
         metadatas = []
         for symbol in symbols : 
-            print(f"Fetching history for symbol: {symbol}")
+            print(f"Fetching {symbol} historical data...")
             ticker = yf.Ticker(symbol)
-            data = ticker.history(period=f"{20*12}mo", interval="1mo") 
+            data = ticker.history(period=f"{20*12}mo", interval="1mo") # last 20 years monthly data
             data = data.reset_index()
             data = json.loads(data.to_json(orient="records", date_format="epoch", date_unit="s"))
             metadata = build_metadata(symbol, asset_type, "history")
@@ -194,11 +210,13 @@ def ingestion_pipeline():
             del ticker, data, doc
             gc.collect()
         mongoClient.disconnect()
-        print(f"Completed fetching history for asset type: {asset_type}")
+        print(f"Completed fetching {asset_type} historical data.")
         return metadatas
     
     @task
     def read_asset_files(asset_type, information_type, file_path):
+        """Read asset data from offline files and store in MongoDB."""
+        print(f"Reading offline file for {asset_type} - {information_type} from {file_path}...")
         mongoClient = get_mongo_client()
         mongoClient.connect()
         metadatas = []
@@ -222,7 +240,6 @@ def ingestion_pipeline():
     def populate_redis_queue(data, queue_name):
         """Pushing mongo document metadata into Redis queue for further processing."""
         print(f"Pushing data into Redis queue: {queue_name}")
-        print(f"Data to push: {data}")
         redisClient = get_redis_client()
         redisClient.connect()
         if isinstance(data, (list, tuple, set)):
@@ -281,13 +298,16 @@ def ingestion_pipeline():
         """Empty end task"""
         print("Ingestion pipeline completed")
     
+    # ========================
     # TASK DEPENDENCIES
+    # ========================
     # ONLINE
+    # ------------------------
     # SYMBOLS EXTRACTION
-    crypto_symbols = get_asset_symbols("crypto", URL=None)
-    forex_symbols = get_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
-    futures_symbols = get_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
-    indices_symbols = get_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
+    crypto_symbols = fetch_asset_symbols("crypto", URL=None)
+    forex_symbols = fetch_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
+    futures_symbols = fetch_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
+    indices_symbols = fetch_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
 
     # CHUNKING SYMBOLS FOR PARALLEL PROCESSING
     crypto_chunks = chunk_list(crypto_symbols, 5)
@@ -309,8 +329,20 @@ def ingestion_pipeline():
     # CSV FILE DOWNLOAD AND EXTRACTION
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
     file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+
+    # POPULATE REDIS TASKS
+    populate_crypto_info = populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata)
+    populate_forex_info = populate_redis_queue.partial(queue_name=FOREX_INFO_QUEUE).expand(data=forex_info_metadata)
+    populate_futures_info = populate_redis_queue.partial(queue_name=FUTURES_INFO_QUEUE).expand(data=futures_info_metadata)
+    populate_indices_info = populate_redis_queue.partial(queue_name=INDICES_INFO_QUEUE).expand(data=indices_info_metadata)
+    populate_crypto_history = populate_redis_queue.partial(queue_name=CRYPTO_HISTORY_QUEUE).expand(data=crypto_history_metadata)
+    populate_forex_history = populate_redis_queue.partial(queue_name=FOREX_HISTORY_QUEUE).expand(data=forex_history_metadata)
+    populate_futures_history = populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata)
+    populate_indices_history = populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata)
+    populate_files = populate_redis_queue(queue_name=FILES_QUEUE, data=file_metadata)
     
     # OFFLINE 
+    # ------------------------
     # ASSET INFO AND HISTORY EXTRACTION
     offline_crypto_info_metadata = read_asset_files(asset_type="crypto", information_type="info", file_path=OFFLINE_CRYPTOCURRENCIES_INFO)
     offline_forex_info_metadata = read_asset_files(asset_type="forex", information_type="info", file_path=OFFLINE_FOREX_INFO)
@@ -322,24 +354,10 @@ def ingestion_pipeline():
     offline_futures_history_metadata = read_asset_files(asset_type="futures", information_type="history", file_path=OFFLINE_FUTURES_HISTORY)
     offline_indices_history_metadata = read_asset_files(asset_type="indices", information_type="history", file_path=OFFLINE_INDICES_HISTORY)
     
+    # FILE EXTRACTION
     offline_file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=OFFLINE_WORLDWIDE_EVENTS, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
-    # BRANCHING
-    online = is_online()
-    offline = is_offline()
-
-    # POPULATE REDIS TASKS - ONLINE
-    populate_crypto_info = populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata)
-    populate_forex_info = populate_redis_queue.partial(queue_name=FOREX_INFO_QUEUE).expand(data=forex_info_metadata)
-    populate_futures_info = populate_redis_queue.partial(queue_name=FUTURES_INFO_QUEUE).expand(data=futures_info_metadata)
-    populate_indices_info = populate_redis_queue.partial(queue_name=INDICES_INFO_QUEUE).expand(data=indices_info_metadata)
-    populate_crypto_history = populate_redis_queue.partial(queue_name=CRYPTO_HISTORY_QUEUE).expand(data=crypto_history_metadata)
-    populate_forex_history = populate_redis_queue.partial(queue_name=FOREX_HISTORY_QUEUE).expand(data=forex_history_metadata)
-    populate_futures_history = populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata)
-    populate_indices_history = populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata)
-    populate_files = populate_redis_queue(queue_name=FILES_QUEUE, data=file_metadata)
-
-    # POPULATE REDIS TASKS - OFFLINE
+    # POPULATE REDIS TASKS
     populate_offline_crypto_info = populate_redis_queue(queue_name=CRYPTO_INFO_QUEUE, data=offline_crypto_info_metadata)
     populate_offline_forex_info = populate_redis_queue(queue_name=FOREX_INFO_QUEUE, data=offline_forex_info_metadata)
     populate_offline_futures_info = populate_redis_queue(queue_name=FUTURES_INFO_QUEUE, data=offline_futures_info_metadata)
@@ -350,16 +368,23 @@ def ingestion_pipeline():
     populate_offline_indices_history = populate_redis_queue(queue_name=INDICES_HISTORY_QUEUE, data=offline_indices_history_metadata)
     populate_offline_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_file_metadata)
 
-    # DEPENDENCIES
+    # ========================
+    # TASK FLOW
+    # ========================
+    # BRANCHING
+    online = is_online()
+    offline = is_offline()
     start() >> [online, offline]
     
-    # Online path
+    # ONLINE PATH
+    # ------------------------
     online >> [crypto_symbols, forex_symbols, futures_symbols, indices_symbols, file_path]
     [populate_crypto_info, populate_forex_info, populate_futures_info, populate_indices_info,
      populate_crypto_history, populate_forex_history, populate_futures_history, populate_indices_history,
      populate_files] >> end()
     
-    # Offline path
+    # OFFLINE PATH
+    # ------------------------
     offline >> [offline_crypto_info_metadata, offline_forex_info_metadata, offline_futures_info_metadata, 
                 offline_indices_info_metadata, offline_crypto_history_metadata, offline_forex_history_metadata,
                 offline_futures_history_metadata, offline_indices_history_metadata, offline_file_metadata]
