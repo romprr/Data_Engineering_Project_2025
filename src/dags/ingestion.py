@@ -41,6 +41,16 @@ FUTURES_HISTORY_QUEUE = os.getenv("FUTURES_HISTORY_QUEUE")
 INDICES_HISTORY_QUEUE = os.getenv("INDICES_HISTORY_QUEUE")
 FILES_QUEUE = os.getenv("FILES_QUEUE")
 
+OFFLINE_CRYPTOCURRENCIES_INFO=os.getenv("OFFLINE_CRYPTOCURRENCIES_INFO")
+OFFLINE_FOREX_INFO=os.getenv("OFFLINE_FOREX_INFO")
+OFFLINE_FUTURES_INFO=os.getenv("OFFLINE_FUTURES_INFO")
+OFFLINE_INDICES_INFO=os.getenv("OFFLINE_INDICES_INFO")
+OFFLINE_CRYPTOCURRENCIES_HISTORY=os.getenv("OFFLINE_CRYPTOCURRENCIES_HISTORY")
+OFFLINE_FOREX_HISTORY=os.getenv("OFFLINE_FOREX_HISTORY")
+OFFLINE_FUTURES_HISTORY=os.getenv("OFFLINE_FUTURES_HISTORY")
+OFFLINE_INDICES_HISTORY=os.getenv("OFFLINE_INDICES_HISTORY")
+OFFLINE_WORLDWIDE_EVENTS=os.getenv("OFFLINE_WORLDWIDE_EVENTS")
+
 def build_metadata(symbol, asset_type, information_type):
     """Build metadata dictionary for a given data."""
     metadata = {
@@ -266,16 +276,6 @@ def ingestion_pipeline():
         else:
             return None
         
-    # @task
-    # def delete_file(file_path):
-    #     """Task to delete file after extraction"""
-    #     try:
-    #         os.remove(file_path)
-    #         print(f"Deleted zip file: {file_path}")
-    #     except Exception as e:
-    #         print(f"Failed to delete zip file: {file_path}. Error: {e}")
-    #         raise
-    
     @task
     def end():
         """Empty end task"""
@@ -310,20 +310,19 @@ def ingestion_pipeline():
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
     file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
     
-
     # OFFLINE 
     # ASSET INFO AND HISTORY EXTRACTION
-    offline_crypto_info_metadata = read_asset_files(asset_type="crypto", information_type="info", file_path="./offline/assets/info/cryptocurrencies.json")
-    offline_forex_info_metadata = read_asset_files(asset_type="forex", information_type="info", file_path="./offline/assets/info/forex.json")
-    offline_futures_info_metadata = read_asset_files(asset_type="futures", information_type="info", file_path="./offline/assets/info/futures.json")
-    offline_indices_info_metadata = read_asset_files(asset_type="indices", information_type="info", file_path="./offline/assets/info/indices.json")   
+    offline_crypto_info_metadata = read_asset_files(asset_type="crypto", information_type="info", file_path=OFFLINE_CRYPTOCURRENCIES_INFO)
+    offline_forex_info_metadata = read_asset_files(asset_type="forex", information_type="info", file_path=OFFLINE_FOREX_INFO)
+    offline_futures_info_metadata = read_asset_files(asset_type="futures", information_type="info", file_path=OFFLINE_FUTURES_INFO)
+    offline_indices_info_metadata = read_asset_files(asset_type="indices", information_type="info", file_path=OFFLINE_INDICES_INFO)   
    
-    offline_crypto_history_metadata = read_asset_files(asset_type="crypto", information_type="history", file_path="./offline/assets/history/cryptocurrencies.json")
-    offline_forex_history_metadata = read_asset_files(asset_type="forex", information_type="history", file_path="./offline/assets/history/forex.json")
-    offline_futures_history_metadata = read_asset_files(asset_type="futures", information_type="history", file_path="./offline/assets/history/futures.json")
-    offline_indices_history_metadata = read_asset_files(asset_type="indices", information_type="history", file_path="./offline/assets/history/indices.json")
+    offline_crypto_history_metadata = read_asset_files(asset_type="crypto", information_type="history", file_path=OFFLINE_CRYPTOCURRENCIES_HISTORY)
+    offline_forex_history_metadata = read_asset_files(asset_type="forex", information_type="history", file_path=OFFLINE_FOREX_HISTORY)
+    offline_futures_history_metadata = read_asset_files(asset_type="futures", information_type="history", file_path=OFFLINE_FUTURES_HISTORY)
+    offline_indices_history_metadata = read_asset_files(asset_type="indices", information_type="history", file_path=OFFLINE_INDICES_HISTORY)
     
-    offline_file_metadata = unzip_file(data_type="worldwide_events", zip_file_path="./offline/events/sample_ucdp_events.zip", extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    offline_file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=OFFLINE_WORLDWIDE_EVENTS, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     # BRANCHING
     online = is_online()
