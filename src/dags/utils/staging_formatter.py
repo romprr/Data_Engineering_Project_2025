@@ -13,7 +13,7 @@ class AssetInfosFormatters :
         return pd.DataFrame([data_struct])
 
     def format_forex_infos(data) :
-
+        print(f'DATA : {data}')
         data_struct = {
             "symbol" : data["symbol"],
             "forex_name" : data["longName"],

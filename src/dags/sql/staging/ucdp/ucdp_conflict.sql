@@ -3,8 +3,17 @@ DROP TABLE IF EXISTS  staging.ucdp_conflict;
 CREATE TABLE staging.ucdp_conflict AS (
     SELECT DISTINCT
         c.conflict_id as conflict_id,
-        c.incompatibility as reason,
-        MAX(c.type_of_conflict) as conflict_type,
+        CASE c.incompatibility
+            WHEN 1 THEN 'Territory'
+            WHEN 2 THEN 'Government'
+            WHEN 3 THEN 'Territory & Government'
+        END reason,
+        CASE MAX(c.type_of_conflict)
+            WHEN 1 THEN 'extrasystemic'
+            WHEN 2 THEN 'interstate'
+            WHEN 3 THEN 'intrastate'
+            WHEN 4 THEN 'internationalized intrastate'
+        END as conflict_type,
         c.territory_name as disputed_territory,
         c.start_date as "start_date",
         ARRAY(

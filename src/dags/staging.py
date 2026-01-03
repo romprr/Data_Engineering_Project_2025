@@ -103,13 +103,24 @@ def staging_pipeline() :
 
         redis_val = redisClient.read(queue_name)
         while redis_val != None :
-            raw_json = json.loads(redis_val)
-            collection_id = raw_json["_id"]
-            raw_data = mongoClient.read({"_id" : collection_id})[0]
 
-            processed_info : pd.DataFrame = format_helper(raw_data["data"])
-            postgresClient.insert_dataframe(processed_info, query)
-            redis_val = redisClient.read(queue_name)
+            raw_json = json.loads(redis_val)
+            print("REDIS JSON", raw_json)
+            
+            collection_id = raw_json["_id"]
+
+            print('CHECK TEST : ', collection_id.find("_[object Object]_"))
+            if collection_id.find("_[object Object]_") == -1 :
+
+                raw = mongoClient.read({"_id" : collection_id})
+                print(raw)
+                raw_data = raw[0]
+
+                processed_info : pd.DataFrame = format_helper(raw_data["data"])
+                postgresClient.insert_dataframe(processed_info, query)
+                redis_val = redisClient.read(queue_name)
+            else :
+                redis_val = redisClient.read(queue_name)
         mongoClient.disconnect()
         
 
@@ -140,6 +151,7 @@ def staging_pipeline() :
         while redis_val != None :
             raw_json = json.loads(redis_val)
             collection_id = raw_json["_id"]
+
             raw_data = mongoClient.read({"_id" : collection_id}, {"_id" : 1, "data" : 1})[0]
 
             processed_info : pd.DataFrame = format_helper(raw_data["_id"], raw_data["data"])
@@ -357,7 +369,7 @@ def staging_pipeline() :
     #     task_id="clean_location",
     #     dag_path=SQL_UCDP_PATH,
     #     sql_file_name="ucdp_location.sql"
-    # )
+    # )load_asset_infos_data
 
     # clean_conflict_locations = create_sql_operator(
     #     task_id="clean_ucdp_conflict_location",
