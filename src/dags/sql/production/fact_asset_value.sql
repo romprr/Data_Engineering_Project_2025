@@ -12,8 +12,8 @@ CREATE TABLE production.fact_asset_value AS (
         NULL AS volume,
         NULL::NUMERIC as dividends,
         v.region
-    FROM staging.forex_value v
-    JOIN production.dim_month_date d ON d.month_date = v.date
+    FROM staging.forex_clean_value v
+    JOIN production.dim_month_date d ON d.month_date = v.clean_date
     JOIN production.dim_asset_info ai ON ai.asset_id = v.forex_id
     
     UNION ALL
@@ -28,8 +28,8 @@ CREATE TABLE production.fact_asset_value AS (
         v.volume AS volume,
         NULL as dividends,
         v.region
-    FROM staging.future_value v
-    JOIN production.dim_month_date d ON d.month_date = v.date
+    FROM staging.future_clean_value v
+    JOIN production.dim_month_date d ON d.month_date = v.clean_date
     JOIN production.dim_asset_info ai ON ai.asset_id = v.future_id
 
     UNION ALL
@@ -44,8 +44,8 @@ CREATE TABLE production.fact_asset_value AS (
         v.volume AS volume,
         v.dividends as dividends,
         v.region
-    FROM staging.index_value v
-    JOIN production.dim_month_date d ON d.month_date = v.date
+    FROM staging.index_clean_value v
+    JOIN production.dim_month_date d ON d.month_date = v.clean_date
     JOIN production.dim_asset_info ai ON ai.asset_id = v.index_id
 
     UNION ALL
@@ -60,8 +60,8 @@ CREATE TABLE production.fact_asset_value AS (
         v.volume AS volume,
         NULL as dividends,
         v.region
-    FROM staging.crypto_value v
-    JOIN production.dim_month_date d ON d.month_date = v.date
+    FROM staging.crypto_clean_value v
+    JOIN production.dim_month_date d ON d.month_date = v.clean_date
     JOIN production.dim_asset_info ai ON ai.asset_id = v.crypto_id
     )
 

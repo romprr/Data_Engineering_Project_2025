@@ -64,10 +64,10 @@ def production_pipeline() :
         sql_file_name="dim_month_date.sql"
     )
 
-    load_episodes = create_sql_operator(
-        task_id="load_conflict_episodes",
-        sql_file_name="fact_conflict_episode.sql"
-    )
+    # load_episodes = create_sql_operator(
+    #     task_id="load_conflict_episodes",
+    #     sql_file_name="fact_conflict_episode.sql"
+    # )
 
     load_sides = create_sql_operator(
         task_id="load_conflict_sides",
@@ -79,14 +79,29 @@ def production_pipeline() :
         sql_file_name="fact_asset_value.sql"
     )
 
-    load_episode_date = create_sql_operator(
-        task_id="load_episode_date",
-        sql_file_name="bridge_episode_date.sql"
-    )
+    # load_episode_date = create_sql_operator(
+    #     task_id="load_episode_date",
+    #     sql_file_name="bridge_episode_date.sql"
+    # )
 
     load_region = create_sql_operator(
         task_id="load_regions",
         sql_file_name="dim_region.sql"
+    )
+
+    load_dim_episodes = create_sql_operator(
+        task_id="load_dim_episodes",
+        sql_file_name="dim_conflict_episode.sql"
+    )
+
+    load_fact_episode_monthly = create_sql_operator(
+        task_id="load_fact_episode_monthly",
+        sql_file_name="fact_conflict_episode_monthly.sql"
+    )
+
+    load_fact_monthly_country_status = create_sql_operator(
+        task_id="load_fact_monthly_country_status",
+        sql_file_name="fact_monthly_country_status.sql"
     )
 
     @task()
@@ -99,12 +114,14 @@ def production_pipeline() :
         load_conflict_actors,
         load_date_dimension,
     ]
+    
+    [load_dim_episodes, load_region, load_date_dimension] >> load_fact_episode_monthly
+    [load_sides, load_fact_episode_monthly, load_conflict_actors] >> load_fact_monthly_country_status
 
-    [load_conflict_info, load_asset_info] >> load_region >> [load_episodes, load_asset_values] 
-    [load_episodes, load_conflict_actors] >> load_sides
-    [load_episodes, load_date_dimension] >> load_episode_date
-    load_date_dimension >> load_asset_values
+    [load_conflict_info, load_asset_info] >> load_region >> load_dim_episodes
+    [load_asset_info, load_date_dimension] >> load_asset_values
+    [load_dim_episodes, load_conflict_actors] >> load_sides
 
-    [load_asset_values, load_sides, load_episode_date] >> end()
+    [load_asset_values, load_sides, load_fact_monthly_country_status] >> end()
 
 production_pipeline()
