@@ -165,8 +165,12 @@ def staging_pipeline() :
         ucdp_actors = []
         ucdp_geo = []
 
+        print(queue_name)
+
         redis_val = redisClient.read(queue_name)
+        print('FETCH MULTIPLE FILES BEFORE WHILE', redis_val)
         while redis_val != None :
+            print('FETCH MULTIPLE FILES', redis_val)
             data = json.loads(redis_val)["data"]
             data_type = json.loads(redis_val)["type"]
             if data_type == 'worldwide_events' :
