@@ -105,11 +105,8 @@ def staging_pipeline() :
         while redis_val != None :
 
             raw_json = json.loads(redis_val)
-            print("REDIS JSON", raw_json)
             
             collection_id = raw_json["_id"]
-
-            print('CHECK TEST : ', collection_id.find("_[object Object]_"))
             if collection_id.find("_[object Object]_") == -1 :
 
                 raw = mongoClient.read({"_id" : collection_id})
