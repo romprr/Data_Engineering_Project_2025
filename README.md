@@ -4,13 +4,34 @@
 
 Project [DATA Engineering](https://www.riccardotommasini.com/courses/dataeng-insa-ot/) is provided by [INSA Lyon](https://www.insa-lyon.fr/).
 
-Students: **[To be assigned]**
+Students: 
+- Adrian Abi Saleh
+- Romain Poirrier
+- Aymerick Yzidee
 
 ### Abstract
 
+[TODO]
+
 ## Datasets Description
 
+### UCDP datasets
+
+The datasets choosen for the conflicts are the UCDP datasets, especially these ones : 
+- Yearly Armed Conflicts
+- Georeferenced Events
+- Actors
+
+These datasets are complementary and are used to enrich the data, they contained armed conflicts by year, informations about every actors in the dataset, and finally specific information about every (or almost every) battle that can be found in the datasets available on UCDP.
+
+### Yahoo Finance
+
+[TODO]
+
 ## Queries
+
+We choose to make 3 queries : 
+[TODO]
 
 ## Requirements
 
