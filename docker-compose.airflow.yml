@@ -80,7 +80,7 @@ x-airflow-common:
     - ./shared_data:/opt/airflow/shared
     - ./offline:/opt/airflow/offline
 
-  user: "1000:0"
+  user: "${AIRFLOW_UID}:0"
   depends_on:
     &airflow-common-depends-on
     redis:
