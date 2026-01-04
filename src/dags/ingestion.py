@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from unittest import case
 
 from airflow.decorators import dag, task
 from airflow.datasets import Dataset
@@ -157,15 +158,23 @@ def ingestion_pipeline():
         """Scrapper to get the asset symbols from a given URL or hardcoded for crypto."""
         print(f"Getting the {asset_type} symbols...")
         symbols = []
-        if URL:
+        if URL: # online scrapper not working 
             print(f"Scrapping: {URL}")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             df = pd.read_html(URL, storage_options=headers)[0]
             symbols = df['Symbol'].dropna().tolist()
             print(f"Scrapping completed.")
-        elif asset_type == "crypto" and URL is None:
+        else:
             print(f"Getting {asset_type} symbols (hardcoded)...")
-            symbols = ["BTC-USD", "ETH-USD"]
+            match asset_type:
+                case "crypto":
+                    symbols = ["BTC-USD", "ETH-USD"]
+                case "forex":
+                    symbols = ['EURUSD=X', 'JPY=X', 'GBPUSD=X', 'AUDUSD=X', 'NZDUSD=X', 'EURJPY=X', 'GBPJPY=X', 'EURGBP=X', 'EURCAD=X', 'EURSEK=X', 'EURCHF=X', 'EURHUF=X', 'CNY=X', 'HKD=X', 'SGD=X', 'INR=X', 'MXN=X', 'PHP=X', 'IDR=X', 'THB=X', 'MYR=X', 'ZAR=X', 'RUB=X']
+                case "futures":
+                    symbols = ['ES=F', 'YM=F', 'NQ=F', 'RTY=F', 'ZB=F', 'ZN=F', 'ZF=F', 'ZT=F', 'GC=F', 'MGC=F', 'SI=F', 'SIL=F', 'PL=F', 'HG=F', 'PA=F', 'CL=F', 'HO=F', 'NG=F', 'RB=F', 'BZ=F', 'B0=F', 'ZC=F', 'ZO=F', 'KE=F', 'ZR=F', 'ZM=F', 'ZL=F', 'ZS=F', 'GF=F', 'HE=F', 'LE=F', 'CC=F', 'KC=F', 'CT=F', 'LBS=F', 'OJ=F', 'SB=F']
+                case "indices":
+                    symbols = ['^GSPC', '^DJI', '^IXIC', '^NYA', '^XAX', '^BUK100P', '^RUT', '^VIX', '^FTSE', '^GDAXI', '^FCHI', '^STOXX50E', '^N100', '^BFX', 'MOEX.ME', '^HSI', '^STI', '^AXJO', '^AORD', '^BSESN', '^JKSE', '^KLSE', '^NZ50', '^KS11', '^TWII', '^GSPTSE', '^BVSP', '^MXX', '^IPSA', '^MERV', '^TA125.TA', '^CASE30', '^JN0U.JO', 'DX-Y.NYB', '^125904-USD-STRD', '^XDB', '^XDE', '000001.SS', '^N225', '^XDN', '^XDA']
         print(f"Number of {asset_type} symbols found: {len(symbols)}")
         return symbols
 
@@ -312,10 +321,10 @@ def ingestion_pipeline():
     # ------------------------
     # SYMBOLS EXTRACTION
     crypto_symbols = fetch_asset_symbols("crypto", URL=None)
-    forex_symbols = fetch_asset_symbols("forex", URL=FOREX_SYMBOLS_SCRAPER_URL)
-    futures_symbols = fetch_asset_symbols("futures", URL=FUTURES_SYMBOLS_SCRAPER_URL)
-    indices_symbols = fetch_asset_symbols("indices", URL=INDICES_SYMBOLS_SCRAPER_URL)
-
+    forex_symbols = fetch_asset_symbols("forex", URL=None)
+    futures_symbols = fetch_asset_symbols("futures", URL=None)
+    indices_symbols = fetch_asset_symbols("indices", URL=None)
+    
     # CHUNKING SYMBOLS FOR PARALLEL PROCESSING
     crypto_chunks = chunk_list(crypto_symbols, 5)
     forex_chunks = chunk_list(forex_symbols, 5)
