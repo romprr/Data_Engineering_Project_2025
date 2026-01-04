@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from airflow.decorators import dag, task
+from airflow.datasets import Dataset
 import yfinance as yf
 import pandas as pd
 import utils.mongo as mongo
@@ -27,6 +28,8 @@ INDICES_SYMBOLS_SCRAPER_URL = os.getenv("INDICES_SYMBOLS_SCRAPER_URL")
 FUTURES_SYMBOLS_SCRAPER_URL = os.getenv("FUTURES_SYMBOLS_SCRAPER_URL")
 FOREX_SYMBOLS_SCRAPER_URL = os.getenv("FOREX_SYMBOLS_SCRAPER_URL")
 WORLDWIDE_EVENTS_CSV_FILE_URL = os.getenv("WORLDWIDE_EVENTS_CSV_FILE_URL")
+WORLDWIDE_ACTORS_CSV_FILE_URL = os.getenv("WORLDWIDE_ACTORS_CSV_FILE_URL")
+WORLDWIDE_GEOREFERENCE_CSV_FILE_URL = os.getenv("WORLDWIDE_GEOREFERENCE_CSV_FILE_URL")
 
 # PATHS
 SHARED_FOLDER_PATH_AIRFLOW = os.getenv("SHARED_FOLDER_PATH_AIRFLOW")
@@ -39,6 +42,8 @@ OFFLINE_FOREX_HISTORY=os.getenv("OFFLINE_FOREX_HISTORY")
 OFFLINE_FUTURES_HISTORY=os.getenv("OFFLINE_FUTURES_HISTORY")
 OFFLINE_INDICES_HISTORY=os.getenv("OFFLINE_INDICES_HISTORY")
 OFFLINE_WORLDWIDE_EVENTS=os.getenv("OFFLINE_WORLDWIDE_EVENTS")
+OFFLINE_WORLDWIDE_ACTORS=os.getenv("OFFLINE_WORLDWIDE_ACTORS")
+OFFLINE_WORLDWIDE_GEO=os.getenv("OFFLINE_WORLDWIDE_GEO")
 
 # DATABASES AND QUEUES 
 MONGO_DB_INGESTION_COLLECTION = os.getenv("MONGO_DB_INGESTION_COLLECTION")
@@ -55,6 +60,8 @@ FUTURES_HISTORY_QUEUE = os.getenv("FUTURES_HISTORY_QUEUE")
 INDICES_HISTORY_QUEUE = os.getenv("INDICES_HISTORY_QUEUE")
 FILES_QUEUE = os.getenv("FILES_QUEUE")
 
+# Dataset to signal staging can trigger
+staging_reagy = Dataset('redis://staging_data_ready')
 
 # =========================
 # UTILS FUNCTIONS
@@ -293,7 +300,7 @@ def ingestion_pipeline():
         else:
             return None
         
-    @task
+    @task(outlets=[staging_reagy])
     def end():
         """Empty end task"""
         print("Ingestion pipeline completed")
@@ -330,6 +337,12 @@ def ingestion_pipeline():
     file_path = download_file(URL=WORLDWIDE_EVENTS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
     file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
+    file_path_actors = download_file(URL=WORLDWIDE_ACTORS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
+    file_metadata_actors = unzip_file(data_type="worldwide_actors", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+
+    file_path_geo = download_file(URL=WORLDWIDE_GEOREFERENCE_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
+    file_metadata_geo = unzip_file(data_type="worldwide_geo", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+
     # POPULATE REDIS TASKS
     populate_crypto_info = populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata)
     populate_forex_info = populate_redis_queue.partial(queue_name=FOREX_INFO_QUEUE).expand(data=forex_info_metadata)
@@ -340,6 +353,8 @@ def ingestion_pipeline():
     populate_futures_history = populate_redis_queue.partial(queue_name=FUTURES_HISTORY_QUEUE).expand(data=futures_history_metadata)
     populate_indices_history = populate_redis_queue.partial(queue_name=INDICES_HISTORY_QUEUE).expand(data=indices_history_metadata)
     populate_files = populate_redis_queue(queue_name=FILES_QUEUE, data=file_metadata)
+    populate_files_actors = populate_redis_queue(queue_name=FILES_QUEUE, data=file_metadata_actors)
+    populate_files_geo = populate_redis_queue(queue_name=FILES_QUEUE, data=file_metadata_geo)
     
     # OFFLINE 
     # ------------------------
@@ -356,6 +371,8 @@ def ingestion_pipeline():
     
     # FILE EXTRACTION
     offline_file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=OFFLINE_WORLDWIDE_EVENTS, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    offline_file_actors_metadata = unzip_file(data_type="worldwide_actors", zip_file_path=OFFLINE_WORLDWIDE_ACTORS, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    offline_file_geo_metadata = unzip_file(data_type="worldwide_geo", zip_file_path=OFFLINE_WORLDWIDE_GEO, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     # POPULATE REDIS TASKS
     populate_offline_crypto_info = populate_redis_queue(queue_name=CRYPTO_INFO_QUEUE, data=offline_crypto_info_metadata)
@@ -367,6 +384,8 @@ def ingestion_pipeline():
     populate_offline_futures_history = populate_redis_queue(queue_name=FUTURES_HISTORY_QUEUE, data=offline_futures_history_metadata)
     populate_offline_indices_history = populate_redis_queue(queue_name=INDICES_HISTORY_QUEUE, data=offline_indices_history_metadata)
     populate_offline_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_file_metadata)
+    populate_offline_actors_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_file_actors_metadata)
+    populate_offline_geo_files = populate_redis_queue(queue_name=FILES_QUEUE, data=offline_file_geo_metadata)
 
     # ========================
     # TASK FLOW
@@ -378,18 +397,18 @@ def ingestion_pipeline():
     
     # ONLINE PATH
     # ------------------------
-    online >> [crypto_symbols, forex_symbols, futures_symbols, indices_symbols, file_path]
+    online >> [crypto_symbols, forex_symbols, futures_symbols, indices_symbols, file_path, file_path_actors, file_path_geo]
     [populate_crypto_info, populate_forex_info, populate_futures_info, populate_indices_info,
      populate_crypto_history, populate_forex_history, populate_futures_history, populate_indices_history,
-     populate_files] >> end()
+     populate_files, populate_files_actors, populate_files_geo] >> end()
     
     # OFFLINE PATH
     # ------------------------
     offline >> [offline_crypto_info_metadata, offline_forex_info_metadata, offline_futures_info_metadata, 
                 offline_indices_info_metadata, offline_crypto_history_metadata, offline_forex_history_metadata,
-                offline_futures_history_metadata, offline_indices_history_metadata, offline_file_metadata]
+                offline_futures_history_metadata, offline_indices_history_metadata, offline_file_metadata, offline_file_actors_metadata, offline_file_geo_metadata]
     [populate_offline_crypto_info, populate_offline_forex_info, populate_offline_futures_info, 
      populate_offline_indices_info, populate_offline_crypto_history, populate_offline_forex_history,
-     populate_offline_futures_history, populate_offline_indices_history, populate_offline_files] >> end()
+     populate_offline_futures_history, populate_offline_indices_history, populate_offline_files, populate_offline_geo_files, populate_offline_actors_files] >> end()
 
 ingestion_pipeline()
