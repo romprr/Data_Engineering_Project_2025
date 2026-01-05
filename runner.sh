@@ -35,6 +35,7 @@ case $arg in
         rm -rf data
         rm -rf logs
         rm -rf metadata
+        rm shared_data/*.csv
         docker-compose -f docker-compose.airflow.yml build --no-cache
         docker compose -f docker-compose.airflow.yml -f docker-compose.yml up -d
         echo "Full restart completed."
