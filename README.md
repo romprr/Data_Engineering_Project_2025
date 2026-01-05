@@ -205,7 +205,7 @@ The PostgreSQL database implements a normalized schema for financial and geopoli
 #### Planned process flow
 
 1. Load data from staging schema to production schema
-2. Shape tables into facts and dimension made to simply queries
+2. Shape tables into facts and dimension made to simplify queries
 
 ## Configuration
 
@@ -263,7 +263,7 @@ cp env.temp .env && ./runner.sh up
 
 Access Airflow at http://localhost:8080 (admin/admin) and trigger the `ingestion_pipeline` DAG.
 
-For first-time setup, follow the detailed instructions below ↓
+**For first-time setup**, follow the detailed instructions **below ↓**
 
 ### Prerequisites
 
@@ -317,6 +317,23 @@ REDIS_1_PASSWORD=crud
 
 > ⚠️ **Security Warning**: Change default credentials for production deployments!
 
+-> For production deployments, you should change the credentials of the Databases AND Airflow.
+
+**⚠️ Airflow Warning**
+
+If you have problem with Airflow not showing DAGs, you might want to consider changing the ``AIRFLOW_UID`` to your user and restart the project.
+
+Get your user id : 
+```bash
+id -u
+```
+
+Run a full restart: 
+```bash
+sudo ./runner.sh full_restart
+```
+
+
 ### Running the Pipeline
 
 The project includes a helper script [`runner.sh`](runner.sh) for common operations:
@@ -351,7 +368,8 @@ The project includes a helper script [`runner.sh`](runner.sh) for common operati
    ```bash
    ./runner.sh full_restart
    ```
-   ⚠️ **Warning**: This deletes all volumes, logs, and data!
+   ⚠️ **Warning**: This deletes all volumes, logs, and data!  
+   -> This command might require ``sudo`` to work.
 
 ### Manual Docker Compose Commands
 
@@ -374,12 +392,13 @@ Once all services are running, trigger the data ingestion pipeline:
 
 1. Navigate to **Airflow UI** at http://localhost:8080
 2. Login with credentials: **admin** / **admin**
-3. Find the DAG named `ingestion_pipeline`
-4. Toggle the DAG to **"On"** (if paused)
-5. Click the **"Play"** button → **"Trigger DAG"**
-6. Monitor progress in the **Grid** or **Graph** view
+3. Add the Postgres connection, with the Postgres credentials in your ``.env`` file, and ``postgres`` as connection id and ``postgres-db`` as host.
+4. Find the DAG named `ingestion_pipeline`
+5. Toggle the DAG to **"On"** (if paused)
+6. Click the **"Play"** button → **"Trigger DAG"**
+7. Monitor progress in the **Grid** or **Graph** view
 
-> **Note**: To run the pipeline in offline mode, please turn off the wifi connection on your pc.
+> **Note**: To run the pipeline in offline mode, please turn off the wifi connection on your pc, if you do, you need to be connected to internet to add the Postgres connection first, once the connection is made you can turn off your internet.
 
 The pipeline will automatically:
 
@@ -736,6 +755,7 @@ This project uses the following open-source software:
 | [psycopg2](https://www.psycopg.org/)               | LGPL v3      | PostgreSQL adapter for Python               |
 | [redis-py](https://github.com/redis/redis-py)      | MIT          | Redis Python client                         |
 | [celery](https://docs.celeryq.dev/)                | BSD 3-Clause | Distributed task queue                      |
+| [plotly](https://plotly.com/)                      | MIT          | Data visualisation                          |
 
 #### Additional Tools
 
