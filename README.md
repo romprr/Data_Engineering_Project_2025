@@ -5,6 +5,7 @@
 Project [DATA Engineering](https://www.riccardotommasini.com/courses/dataeng-insa-ot/) is provided by [INSA Lyon](https://www.insa-lyon.fr/).
 
 Students:
+
 - Adrian Abi Saleh
 - Romain Poirrier
 - Aymerick Yzidee
@@ -185,13 +186,9 @@ config/
 ├── airflow/
 │   └── airflow.cfg          # Airflow custom configuration
 ├── mongodb/
-│   ├── init.js              # Production MongoDB initialization
-│   └── test/
-│       └── init.js          # Test MongoDB initialization
+│   └── init.js              # Production MongoDB initialization
 ├── postgres/
-│   ├── init.sql             # Schema creation script
-│   └── test/
-│       └── init.sql         # Test database schema
+│   └── init.sql             # Schema creation script
 └── redis/
     └── redis.conf           # Redis configuration
 ```
@@ -202,14 +199,7 @@ config/
 
 **Collections Created**:
 
-- `stock_prices`: Historical stock price data
-- `companies_info`: Company metadata
-- `stock_transactions`: Trading activity
-- `crypto_prices`: Cryptocurrency prices
-- `crypto_transactions`: Crypto trades
-- `political_events`: Geopolitical events
-- `politicians`: Political figures
-- `politicians_market_transactions`: Politician trading records
+- `ingestion`: Holds all the fininacial history and information
 
 **Users**:
 
@@ -308,14 +298,14 @@ docker compose -f docker-compose.airflow.yml -f docker-compose.yml down
 
 After starting the containers, access the following UIs:
 
-| Service                  | URL                   | Credentials             |
-| ------------------------ | --------------------- | ----------------------- |
-| **Airflow**              | http://localhost:8080 | admin / admin           |
-| **PgAdmin** (PostgreSQL) | http://localhost:5050 | admin@admin.com / admin |
-| **Redis Insight 1**      | http://localhost:5540 | -                       |                     |
-| **Streamlit**            | http://localhost:8501 | -                       |
-| **MongoDB**              | localhost:27017       | admin / admin           |
-| **PostgreSQL**           | localhost:5432        | postgres / postgres     |
+| Service                  | URL                   | Credentials                      |
+| ------------------------ | --------------------- | -------------------------------- |
+| **Airflow**              | http://localhost:8080 | admin / admin                    |
+| **PgAdmin** (PostgreSQL) | http://localhost:5050 | admin@admin.com / admin          |
+| **Redis Insight 1**      | http://localhost:5540 | redis://crud:crud@redis-1:6379/0 |
+| **Streamlit**            | http://localhost:8501 | -                                |
+| **MongoDB**              | localhost:27017       | admin / admin                    |
+| **PostgreSQL**           | localhost:5432        | postgres / postgres              |
 
 ### Running the Ingestion Pipeline
 
@@ -442,8 +432,8 @@ Data persists across container restarts:
 - `./data/mongo`: MongoDB data files
 - `./data/postgres`: PostgreSQL data
 - `./metadata/airflow`: Airflow logs and metadata
-- `./shared_data`: Shared CSV files
-- `./offline`: Offline data cache
+- `./shared_data`: Shared unzipped CSV files between ingestion and staging zones
+- `./offline`: Offline data samples
 
 ### 7. **Airflow Executor**
 
