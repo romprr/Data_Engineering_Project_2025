@@ -32,18 +32,6 @@ services:
       - ingestion
       - staging
 
-  redis-2:
-    image: redis:latest
-    container_name: redis-2
-    command : redis-server /usr/local/etc/redis/redis.conf
-    volumes:
-      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf
-    ports:
-      - "6381:6379"
-    networks:
-      - staging
-      - production
-
   postgres-db:
     image: postgres:16.4
     container_name: postgres
@@ -62,19 +50,6 @@ services:
       - ./shared_data:/shared
     networks:
       - staging
-
-  graph-db:
-    image: neo4j:latest
-    container_name: neo4j
-    environment:
-      NEO4J_AUTH: ${NEO4J_AUTH}
-    ports:
-      - "7474:7474" # UI access
-      - "7687:7687" # Bolt protocol
-    volumes:
-      - ./data/neo4j:/data
-      - ./config/neo4j:/docker-entrypoint-initdb.d
-    networks:
       - production
 
   # ===================================
@@ -90,17 +65,6 @@ services:
     networks:
       - ingestion
       - staging
-
-  redis-insight-2:
-    container_name: redis-insight-2
-    image: redis/redisinsight 
-    ports:
-      - "5541:5540" 
-    depends_on:
-      - redis-2
-    networks:
-      - staging
-      - production
   
   postgres-insight:
     container_name: pgadmin
@@ -120,15 +84,20 @@ services:
   # ===================================
   streamlit:
     container_name: streamlit-webapp
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     build:
-      context: ./docker/streamlit
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/streamlit/Dockerfile
     ports:
       - "8501:8501"
     volumes:
       - ./src/streamlit:/app
     depends_on:
-      - graph-db
+      - postgres-db
     networks:
       - production
 
