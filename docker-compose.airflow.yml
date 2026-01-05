@@ -73,7 +73,7 @@ x-airflow-common:
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
-    - ./src/dags:/opt/airflow/dags
+    - ./src/dags:/opt/airflow/dags:Z
     - ./metadata/airflow/logs:/opt/airflow/logs
     - ./config/airflow:/opt/airflow/config
     - ./plugins/airflow:/opt/airflow/plugins
@@ -97,7 +97,7 @@ services:
       POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
       POSTGRES_DB: ${AIRFLOW_POSTGRES_DB}
     volumes:
-      - ./metadata/airflow/postgres:/var/lib/postgresql/data
+      - ./metadata/airflow/postgres:/var/lib/postgresql/data:Z
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s

@@ -70,7 +70,7 @@ class MongoDBClient:
         :param projection: Fields to include or exclude.
         :return: List of documents.
         """
-        if not self.collection:
+        if self.collection is None:
             raise RuntimeError("Not connected to MongoDB.")
         cursor = self.collection.find(query, projection)
         return list(cursor)

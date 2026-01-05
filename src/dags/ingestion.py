@@ -108,6 +108,9 @@ default_args = {
     "email_on_failure": False, # disable email on failure
 }
 
+# Dataset to signal staging can trigger
+staging_reagy = Dataset('redis://staging_data_ready')
+
 @dag(
     dag_id="ingestion_pipeline",
     default_args=default_args, 

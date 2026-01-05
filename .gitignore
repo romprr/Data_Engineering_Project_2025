@@ -4,5 +4,9 @@ data/
 metadata/
 *.DS_Store
 tester/
+TODO.md
+shared_data/*
+src/dags/logs
+venv/
 shared_data/*
 !shared_data/.gitkeep

@@ -1,0 +1,16 @@
+DROP TABLE IF EXISTS  staging.crypto_value;
+
+CREATE TABLE staging.crypto_value AS (
+    SELECT
+        'crypto_' || hs.symbol || '_asset' AS crypto_id,
+        TO_TIMESTAMP(hs.value_timestamp::INT)::DATE AS "date",
+        hs.value_open,
+        hs.value_high,
+        hs.value_low,
+        hs.value_close,
+        hs.volume,
+        rt.region
+    FROM raw.CRYPTO_HISTORY hs
+    JOIN staging.crypto_info c ON c.symbol = hs.symbol
+    JOIN staging.assets_region_translation rt ON rt.exchange_timezone = c.exchange_timezone
+);
