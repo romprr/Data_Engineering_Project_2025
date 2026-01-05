@@ -56,7 +56,7 @@ default_args = {
     "owner" : "niceJobTeam",
     "depends_on_past" : False,
     "retries" : 3,
-    "retry_delay" : timedelta(minutes=5),
+    "retry_delay" : timedelta(seconds=5),
     "email_on_failure" : False
 }
 

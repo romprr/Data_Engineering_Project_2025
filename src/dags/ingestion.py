@@ -105,7 +105,7 @@ default_args = {
     "owner": "niceJobTeam",
     "depends_on_past": False, # do not depend on past runs
     "retries": 3, # number of retries on failure
-    "retry_delay": timedelta(minutes=5), # wait time between retries
+    "retry_delay": timedelta(seconds=5), # wait time between retries
     "email_on_failure": False, # disable email on failure
 }
 
