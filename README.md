@@ -756,6 +756,7 @@ This project uses the following open-source software:
 | [redis-py](https://github.com/redis/redis-py)      | MIT          | Redis Python client                         |
 | [celery](https://docs.celeryq.dev/)                | BSD 3-Clause | Distributed task queue                      |
 | [plotly](https://plotly.com/)                      | MIT          | Data visualisation                          |
+| [matplotlib](https://matplotlib.org/)              | Custom based on PSF | Data visualisation                   |
 
 #### Additional Tools
 

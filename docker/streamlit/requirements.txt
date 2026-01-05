@@ -3,3 +3,4 @@ plotly
 pandas
 numpy
 psycopg2-binary
+matplotlib
