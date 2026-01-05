@@ -350,10 +350,10 @@ def ingestion_pipeline():
     file_metadata = unzip_file(data_type="worldwide_events", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     file_path_actors = download_file(URL=WORLDWIDE_ACTORS_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
-    file_metadata_actors = unzip_file(data_type="worldwide_actors", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    file_metadata_actors = unzip_file(data_type="worldwide_actors", zip_file_path=file_path_actors, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     file_path_geo = download_file(URL=WORLDWIDE_GEOREFERENCE_CSV_FILE_URL, path=SHARED_FOLDER_PATH_AIRFLOW)
-    file_metadata_geo = unzip_file(data_type="worldwide_geo", zip_file_path=file_path, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
+    file_metadata_geo = unzip_file(data_type="worldwide_geo", zip_file_path=file_path_geo, extract_to_path=SHARED_FOLDER_PATH_AIRFLOW)
 
     # POPULATE REDIS TASKS
     populate_crypto_info = populate_redis_queue.partial(queue_name=CRYPTO_INFO_QUEUE).expand(data=crypto_info_metadata)
