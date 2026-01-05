@@ -495,10 +495,10 @@ CSV HEADER;
     )
 
 
-    load_futures_infos >> translate_region_timezones >> load_futures_history >> clean_futures_infos >> clean_futures_values
-    load_index_infos >> translate_region_timezones >> load_index_history >> clean_index_infos >> clean_index_values
-    load_crypto_infos >> translate_region_timezones >> load_crypto_history >> clean_crypto_infos >> clean_crypto_values
-    load_forex_infos >> translate_region_timezones >> load_forex_history >> clean_forex_infos >> clean_forex_values
+    load_futures_infos >> load_futures_history >> clean_futures_infos >> translate_region_timezones >> clean_futures_values
+    load_index_infos >> load_index_history >> clean_index_infos >> translate_region_timezones >> clean_index_values
+    load_crypto_infos >> load_crypto_history >> clean_crypto_infos >> translate_region_timezones >> clean_crypto_values
+    load_forex_infos >> load_forex_history >> clean_forex_infos >> translate_region_timezones >> clean_forex_values
     [load_ucdp_conflicts, load_ucdp_actors, load_ucdp_geo] >> clean_conflicts >> clean_geo >> clean_episodes >> clean_actors >> clean_side #>> [clean_locations, clean_region, clean_conflict_locations, clean_conflict_regions]
     
 
