@@ -4,59 +4,24 @@
 
 Project [DATA Engineering](https://www.riccardotommasini.com/courses/dataeng-insa-ot/) is provided by [INSA Lyon](https://www.insa-lyon.fr/).
 
-Students: **[To be assigned]**
+Students:
+- Adrian Abi Saleh
+- Romain Poirrier
+- Aymerick Yzidee
 
 ## Abstract
 
 This project implements a comprehensive data engineering pipeline for financial market analysis, integrating multiple data sources including cryptocurrency, forex, futures, indices data from Yahoo Finance, and worldwide geopolitical events from UCDP (Uppsala Conflict Data Program). The architecture follows a three-layer approach: **Ingestion**, **Staging**, and **Production**, orchestrated by Apache Airflow and supported by a multi-database ecosystem.
 
-The pipeline is designed to handle both online and offline data acquisition modes, ensuring reproducibility and resilience. Metadata flows through Redis queues between pipeline stages, with MongoDB serving as the raw data lake, PostgreSQL as the structured analytical and transactional databases, and a Streamlit web application for data visualization and insights.
+The pipeline is designed to handle both online and offline data acquisition modes, ensuring reproducibility and resilience. Metadata flows through Redis queues between pipeline stages, with MongoDB serving as the raw data lake, PostgreSQL as the structured analytical and transformation database, and a Streamlit web application for data visualization and insights.
 
 ## Architecture Overview
 
-The project implements a **Lambda Architecture** pattern with three distinct processing layers:
+The project implements a Multi Stage Architecture pattern with three distinct processing layers:
 
 ### Data Flow Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         INGESTION LAYER                               │
-│  ┌────────────────┐        ┌──────────────┐      ┌────────────┐     │
-│  │ Yahoo Finance  │───────▶│   Airflow    │─────▶│  MongoDB   │     │
-│  │ UCDP Data      │        │  DAG Tasks   │      │ (Raw Data) │     │
-│  └────────────────┘        └──────────────┘      └─────┬──────┘     │
-│                                                         │            │
-│                                                         ▼            │
-│                                                   ┌──────────┐       │
-│                                                   │ Redis-1  │       │
-│                                                   │ Queues   │       │
-│                                                   └────┬─────┘       │
-└────────────────────────────────────────────────────────┼─────────────┘
-                                                         │
-┌────────────────────────────────────────────────────────┼─────────────┐
-│                        STAGING LAYER                   │             │
-│                                                        ▼             │
-│  ┌──────────────┐      ┌────────────┐        ┌──────────────┐      │
-│  │  Redis-1     │─────▶│  Airflow   │───────▶│  PostgreSQL  │      │
-│  │  (Input)     │      │ Processing │        │ (Structured) │      │
-│  └──────────────┘      └────────────┘        └──────┬───────┘      │
-│                                                      │              │
-│                                                      ▼              │
-│                                               ┌──────────┐          │
-│                                               │ Redis-2  │          │
-│                                               │ Queues   │          │
-│                                               └────┬─────┘          │
-└────────────────────────────────────────────────────┼────────────────┘
-                                                     │
-┌────────────────────────────────────────────────────┼────────────────┐
-│                      PRODUCTION LAYER              │                │
-│                                                    ▼                │
-│  ┌──────────────┐      ┌────────────┐      ┌──────────────┐       │
-│  │  Redis-2     │─────▶│  Airflow   │─────▶│  Streamlit   │       │
-│  │  (Input)     │      │ Processing │      │  Web App     │       │
-│  └──────────────┘      └────────────┘      └──────────────┘       │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Data Flow](./images/report/Project_architecture.png)
 
 ### Technology Stack
 
@@ -94,7 +59,7 @@ The project implements a **Lambda Architecture** pattern with three distinct pro
 2. **Geopolitical Data** (UCDP):
    - Worldwide conflict events
    - Actor information
-   - Georeference data
+   - Georeferenced events
 
 #### Process Flow:
 
@@ -166,33 +131,28 @@ The PostgreSQL database implements a normalized schema for financial and geopoli
 
 **Core Entities**:
 
-- `Continent`, `Country`: Geographic hierarchy
-- `Company`, `Individual`: Market participants
-- `Holder`: Abstract entity for ownership tracking
-- `Market`: Trading venues with status tracking
-- `Asset`: Financial instruments (Forex, Commodity, Stock, ETF, Cryptocurrency)
-- `Transaction`: Buy/sell operations with full audit trail
-- `Event`: Economic, Political, Natural Disaster, Technological, Social events
-- `CountryEvent`, `AssetEvent`, `MarketEvent`: Event impact relationships
+- `Index_Exchange`, `Forex_Exchange`, `Futures_Exchange`, `Crypto_Exchange`: General informations about the assets
+- `Index_History`, `Forex_History`, `Futures_History`, `Crypto_History`: Monthly financial informations of the assets
+- `UCDP_Conflict`: Yearly conflicts from UCDP
+- `UCDP_Acto`: Actors used in UCDP datasets
+- `UCDP_GEOREFERENCES`: Events referenced with geo localisation, down to each battle
 
 **Key Relationships**:
 
-- Countries belong to Continents
-- Companies and Individuals can be Holders
-- Assets linked to Markets and provider Companies
-- Events can impact Countries, Assets, and Markets with magnitude/type tracking
+- Assets history are linked to Asset informations
+- Conflicts contain episodes
+- Actors are linked to episodes of conflicts, either as primary/secondary party
+  - Actors take a side in an episode of a conflict (ex: Side A or B)
+- Geo referenced events are linked to conflicts
 
 #### Planned Process Flow:
 
-1. Poll Redis-1 queues for new metadata
-2. Retrieve raw documents from MongoDB
-3. Parse and transform data:
-   - Extract company information → `Company` table
-   - Parse asset data → `Asset` table
-   - Transform historical prices → time-series tables
-   - Parse UCDP events → `Event`, `CountryEvent` tables
-4. Insert normalized data into PostgreSQL
-5. Push processed record IDs to Redis-2 queues
+1. Poll Redis-1 queues for new metadata & files paths
+2. Retrieve raw documents from MongoDB or CSV files
+3. Insert raw data transformed to fit the Postgres DB
+4. Run multiple SQL queries in a "dbt" way to transform the data
+   1. New tables get created for each transformation model
+5. Trigger production when staging ends
 
 ### 3. Production Layer
 
@@ -201,7 +161,6 @@ The PostgreSQL database implements a normalized schema for financial and geopoli
 #### Components:
 
 - **Data Consumers**: Streamlit web application
-- **Input Queue**: Redis-2
 - **Networks**: `production`
 
 #### Streamlit Application:
@@ -210,7 +169,10 @@ The PostgreSQL database implements a normalized schema for financial and geopoli
 - **Port**: 8501
 - **Features**: Interactive dashboards for market analysis and event correlation
 
-**Note**: Neo4j graph database was initially planned for network analysis but has been removed from the production environment.
+#### Planned process flow
+
+1. Load data from staging schema to production schema
+2. Shape tables into facts and dimension made to simply queries
 
 ## Configuration
 
@@ -350,8 +312,7 @@ After starting the containers, access the following UIs:
 | ------------------------ | --------------------- | ----------------------- |
 | **Airflow**              | http://localhost:8080 | admin / admin           |
 | **PgAdmin** (PostgreSQL) | http://localhost:5050 | admin@admin.com / admin |
-| **Redis Insight 1**      | http://localhost:5540 | -                       |
-| **Redis Insight 2**      | http://localhost:5541 | -                       |
+| **Redis Insight 1**      | http://localhost:5540 | -                       |                     |
 | **Streamlit**            | http://localhost:8501 | -                       |
 | **MongoDB**              | localhost:27017       | admin / admin           |
 | **PostgreSQL**           | localhost:5432        | postgres / postgres     |
@@ -383,9 +344,9 @@ The pipeline will automatically:
 4. **General Tab**:
    - Name: `Financial Data DB`
 5. **Connection Tab**:
-   - Host: `postgres-db` (or `postgres` for staging data)
+   - Host: `postgres-db`
    - Port: `5432`
-   - Maintenance database: `financial_data`
+   - Maintenance database: `stock`
    - Username: `postgres`
    - Password: `postgres`
 6. Click "Save"
@@ -470,8 +431,8 @@ LPOP crypto_info
 Three separate Docker networks ensure security and organization:
 
 - `ingestion`: Airflow worker ↔ MongoDB ↔ Redis-1
-- `staging`: Airflow worker ↔ PostgreSQL ↔ Redis-1 ↔ Redis-2
-- `production`: Airflow worker ↔ Redis-2 ↔ Streamlit
+- `staging`: Airflow worker ↔ PostgreSQL ↔ Redis-1
+- `production`: Airflow worker ↔ PostgreSQL ↔ Streamlit
 - `airflow`: Internal Airflow component communication
 
 ### 6. **Volume Persistence**
@@ -512,12 +473,9 @@ Expected data volumes per run:
 
 ### 10. **Future Enhancements**
 
-- Complete staging DAG implementation for ETL to PostgreSQL
-- Production DAG for analytical aggregations
-- Streamlit dashboard development
-- Data quality validation layer
 - Incremental updates (only fetch new data)
 - Monitoring and alerting with Prometheus/Grafana
+- Other sources of data
 
 ## Note for Students
 
