@@ -1,13 +1,47 @@
 # Financial Data Engineering Pipeline
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
+[![Airflow](https://img.shields.io/badge/Apache-Airflow-017CEE?logo=apache-airflow)](https://airflow.apache.org/)
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python)](https://www.python.org/)
+
 ![Insalogo](./images/logo-insa_0.png)
 
-Project [DATA Engineering](https://www.riccardotommasini.com/courses/dataeng-insa-ot/) is provided by [INSA Lyon](https://www.insa-lyon.fr/).
+**Course**: [DATA Engineering](https://www.riccardotommasini.com/courses/dataeng-insa-ot/) @ [INSA Lyon](https://www.insa-lyon.fr/)
 
-Students:
+**Team Members**:
+
 - Adrian Abi Saleh
 - Romain Poirrier
 - Aymerick Yzidee
+
+---
+
+## 📋 Table of Contents
+
+- [Abstract](#abstract)
+- [Architecture Overview](#architecture-overview)
+  - [Data Flow Architecture](#data-flow-architecture)
+  - [Technology Stack](#technology-stack)
+- [Project Design by Layer](#project-design-by-layer)
+  - [1. Ingestion Layer](#1-ingestion-layer)
+  - [2. Staging Layer](#2-staging-layer)
+  - [3. Production Layer](#3-production-layer)
+- [Configuration](#configuration)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation & Setup](#installation--setup)
+  - [Running the Pipeline](#running-the-pipeline)
+- [Accessing Services](#accessing-services)
+- [Connection Guides](#connection-guides)
+- [Key Considerations](#key-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Datasets Description](#datasets-description)
+- [Example Queries](#example-queries)
+- [Licenses](#licenses)
+- [Contributing](#contributing)
+
+---
 
 ## Abstract
 
@@ -17,7 +51,7 @@ The pipeline is designed to handle both online and offline data acquisition mode
 
 ## Architecture Overview
 
-The project implements a Multi Stage Architecture pattern with three distinct processing layers:
+The project implements a **Multi-Stage Architecture** pattern with three distinct processing layers, ensuring separation of concerns and scalable data processing.
 
 ### Data Flow Architecture
 
@@ -122,7 +156,6 @@ The project implements a Multi Stage Architecture pattern with three distinct pr
 - **Airflow DAG**: [`src/dags/staging.py`](src/dags/staging.py) (placeholder)
 - **Data Store**: PostgreSQL (`postgres-db` container)
 - **Input Queue**: Redis-1
-- **Output Queue**: Redis-2
 - **Networks**: `staging`
 
 #### Database Schema:
@@ -134,7 +167,7 @@ The PostgreSQL database implements a normalized schema for financial and geopoli
 - `Index_Exchange`, `Forex_Exchange`, `Futures_Exchange`, `Crypto_Exchange`: General informations about the assets
 - `Index_History`, `Forex_History`, `Futures_History`, `Crypto_History`: Monthly financial informations of the assets
 - `UCDP_Conflict`: Yearly conflicts from UCDP
-- `UCDP_Acto`: Actors used in UCDP datasets
+- `UCDP_Actors`: Actors used in UCDP datasets
 - `UCDP_GEOREFERENCES`: Events referenced with geo localisation, down to each battle
 
 **Key Relationships**:
@@ -172,7 +205,7 @@ The PostgreSQL database implements a normalized schema for financial and geopoli
 #### Planned process flow
 
 1. Load data from staging schema to production schema
-2. Shape tables into facts and dimension made to simply queries
+2. Shape tables into facts and dimension made to simplify queries
 
 ## Configuration
 
@@ -185,13 +218,9 @@ config/
 ├── airflow/
 │   └── airflow.cfg          # Airflow custom configuration
 ├── mongodb/
-│   ├── init.js              # Production MongoDB initialization
-│   └── test/
-│       └── init.js          # Test MongoDB initialization
+│   └── init.js              # Production MongoDB initialization
 ├── postgres/
-│   ├── init.sql             # Schema creation script
-│   └── test/
-│       └── init.sql         # Test database schema
+│   └── init.sql             # Schema creation script
 └── redis/
     └── redis.conf           # Redis configuration
 ```
@@ -202,14 +231,7 @@ config/
 
 **Collections Created**:
 
-- `stock_prices`: Historical stock price data
-- `companies_info`: Company metadata
-- `stock_transactions`: Trading activity
-- `crypto_prices`: Cryptocurrency prices
-- `crypto_transactions`: Crypto trades
-- `political_events`: Geopolitical events
-- `politicians`: Political figures
-- `politicians_market_transactions`: Politician trading records
+- `ingestion`: Holds all the fininacial history and information
 
 **Users**:
 
@@ -223,35 +245,94 @@ Automatically executed on container startup to create the normalized schema desc
 
 ### Redis Configuration
 
-**Two Redis Instances**:
-
-1. **Redis-1** (Port 6380): Ingestion → Staging communication
-2. **Redis-2** (Port 6381): Staging → Production communication
+**Redis-1** (Port 6379): Ingestion → Staging communication
 
 **Configuration**: [`config/redis/redis.conf`](config/redis/redis.conf)
 
-## How to Run
+---
+
+## Getting Started
+
+### Quick Start
+
+**TL;DR** - Already have Docker installed?
+
+```bash
+cp env.temp .env && ./runner.sh up
+```
+
+Access Airflow at http://localhost:8080 (admin/admin) and trigger the `ingestion_pipeline` DAG.
+
+**For first-time setup**, follow the detailed instructions **below ↓**
 
 ### Prerequisites
 
-- Docker Desktop installed and running
-- Minimum 4GB RAM available
-- Minimum 2 CPU cores
-- At least 10GB free disk space
-- (Optional) Internet connection for online data fetching
+Before running this project, ensure you have:
 
-### Environment Setup
+- **Docker Desktop** installed and running
+  - [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
+- **System Requirements**:
+  - Minimum 4GB RAM available
+  - Minimum 2 CPU cores
+  - At least 10GB free disk space
+- **Optional**: Internet connection for online data fetching (offline mode is also supported)
 
-1. **Clone the Repository**:
+### Installation & Setup
 
-   ```bash
-   git clone <repository-url>
-   cd Data_Engineering_Project_2025
-   ```
+#### 1. Clone the Repository
 
-2. **Create Environment File**:
+```bash
+git clone <repository-url>
+cd Data_Engineering_Project_2025
+```
 
-// TODO
+#### 2. Environment Configuration
+
+The project requires environment variables to be configured. A template file `env.temp` is provided in the repository.
+
+**Create your `.env` file from the template**:
+
+```bash
+cp .env.temp .env
+```
+
+> **Note**: The `.env` file is git-ignored for security. You must create it from `env.temp` before running the project.
+
+**Review and modify** the `.env` file if needed. Default credentials are suitable for development:
+
+```dotenv
+# PostgreSQL
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=admin
+POSTGRES_DB=stock
+
+# MongoDB
+MONGO_INITDB_ROOT_USERNAME=root
+MONGO_INITDB_ROOT_PASSWORD=root
+
+# Redis
+REDIS_1_USERNAME=crud
+REDIS_1_PASSWORD=crud
+```
+
+> ⚠️ **Security Warning**: Change default credentials for production deployments!
+
+-> For production deployments, you should change the credentials of the Databases AND Airflow.
+
+**⚠️ Airflow Warning**
+
+If you have problem with Airflow not showing DAGs, you might want to consider changing the ``AIRFLOW_UID`` to your user and restart the project.
+
+Get your user id : 
+```bash
+id -u
+```
+
+Run a full restart: 
+```bash
+sudo ./runner.sh full_restart
+```
+
 
 ### Running the Pipeline
 
@@ -287,7 +368,8 @@ The project includes a helper script [`runner.sh`](runner.sh) for common operati
    ```bash
    ./runner.sh full_restart
    ```
-   ⚠️ **Warning**: This deletes all volumes, logs, and data!
+   ⚠️ **Warning**: This deletes all volumes, logs, and data!  
+   -> This command might require ``sudo`` to work.
 
 ### Manual Docker Compose Commands
 
@@ -304,52 +386,65 @@ docker compose -f docker-compose.airflow.yml -f docker-compose.yml logs -f
 docker compose -f docker-compose.airflow.yml -f docker-compose.yml down
 ```
 
-### Accessing Services
+#### Running the Ingestion DAG
 
-After starting the containers, access the following UIs:
+Once all services are running, trigger the data ingestion pipeline:
 
-| Service                  | URL                   | Credentials             |
-| ------------------------ | --------------------- | ----------------------- |
-| **Airflow**              | http://localhost:8080 | admin / admin           |
-| **PgAdmin** (PostgreSQL) | http://localhost:5050 | admin@admin.com / admin |
-| **Redis Insight 1**      | http://localhost:5540 | -                       |                     |
-| **Streamlit**            | http://localhost:8501 | -                       |
-| **MongoDB**              | localhost:27017       | admin / admin           |
-| **PostgreSQL**           | localhost:5432        | postgres / postgres     |
+1. Navigate to **Airflow UI** at http://localhost:8080
+2. Login with credentials: **admin** / **admin**
+3. Add the Postgres connection, with the Postgres credentials in your ``.env`` file, and ``postgres`` as connection id and ``postgres-db`` as host.
+4. Find the DAG named `ingestion_pipeline`
+5. Toggle the DAG to **"On"** (if paused)
+6. Click the **"Play"** button → **"Trigger DAG"**
+7. Monitor progress in the **Grid** or **Graph** view
 
-### Running the Ingestion Pipeline
-
-1. Navigate to Airflow UI at http://localhost:8080
-2. Login with credentials (admin/admin)
-3. Find the DAG `ingestion_pipeline`
-4. Toggle the DAG to "On" (if paused)
-5. Click the "Play" button → "Trigger DAG"
-6. Monitor progress in the Grid/Graph view
+> **Note**: To run the pipeline in offline mode, please turn off the wifi connection on your pc, if you do, you need to be connected to internet to add the Postgres connection first, once the connection is made you can turn off your internet.
 
 The pipeline will automatically:
 
-- Detect internet connectivity
-- Fetch financial data from Yahoo Finance (or use offline data)
-- Download UCDP datasets
+- Detect internet connectivity (online vs offline mode)
+- Fetch financial data from Yahoo Finance or use local cache
+- Download UCDP conflict datasets
 - Store raw data in MongoDB
 - Populate Redis queues for downstream processing
+
+**Expected Runtime**: 5-15 minutes depending on network speed and system resources.
+
+---
+
+## Accessing Services
+
+After starting the containers, access the following UIs:
+
+| Service                  | URL                   | Credentials                     |
+| ------------------------ | --------------------- | ------------------------------- |
+| **Airflow**              | http://localhost:8080 | admin / admin                   |
+| **PgAdmin** (PostgreSQL) | http://localhost:5050 | admin@admin.com / admin         |
+| **Redis Insight**        | http://localhost:5540 | (Add database manually)         |
+| **Streamlit**            | http://localhost:8501 | No authentication required      |
+| **MongoDB**              | localhost:27017       | root / root (admin auth)        |
+| **PostgreSQL**           | localhost:5432        | admin / admin (database: stock) |
+
+> **Note**: Default credentials are configured in the `.env` file. Change them for production use!
+
+---
 
 ## Connection Guides
 
 ### Connecting to PostgreSQL via PgAdmin
 
 1. Access PgAdmin at http://localhost:5050
-2. Login with credentials from `.env`
-3. Right-click "Servers" → "Register" → "Server"
+2. Login with `admin@admin.com` / `admin`
+3. Right-click **"Servers"** → **"Register"** → **"Server"**
 4. **General Tab**:
    - Name: `Financial Data DB`
 5. **Connection Tab**:
    - Host: `postgres-db`
    - Port: `5432`
    - Maintenance database: `stock`
-   - Username: `postgres`
-   - Password: `postgres`
-6. Click "Save"
+   - Username: `admin`
+   - Password: `admin`
+6. Click **"Save"**
 
 ### Connecting to MongoDB
 
@@ -360,45 +455,51 @@ The pipeline will automatically:
 docker exec -it mongo bash
 
 # Connect with mongosh
-mongosh "mongodb://admin:admin@localhost:27017/stocks?authSource=admin"
+mongosh "mongodb://crud:crud@localhost:27017/?authSource=raw_data_db"
+
+# Switch to the stocks database
+use raw_data_db
 
 # Query data
-use stocks
-db.raw_data.find({type: "crypto"}).limit(5)
+db.ingestion.find({type: "crypto"}).limit(5)
 ```
 
 **Via MongoDB Compass**:
 
-- Connection string: `mongodb://admin:admin@localhost:27017/stocks?authSource=admin`
+- Connection string: `mongodb://crud:crud@localhost:27017/?authSource=raw_data_db`
 
 ### Connecting to Redis
 
 **Via Redis Insight**:
 
-1. Access Redis Insight 1 at http://localhost:5540
-2. Add database:
-   - Host: `redis-1`
-   - Port: `6379`
-   - Name: `Ingestion Redis`
+1. Access Redis Insight at http://localhost:5540
+2. Click **"Add Redis Database"**
+3. Select **"Connect to a Redis database"**
+4. Enter connection details:
+   - **Host**: `redis-1`
+   - **Port**: `6379`
+   - **Database Alias**: `Ingestion Redis`
+   - **Username**: `crud`
+   - **Password**: `crud`
+5. Click **"Add Redis Database"**
 
 **Via CLI**:
 
 ```bash
-# Access Redis-1 (Ingestion)
-docker exec -it redis-1 redis-cli
-
-# Access Redis-2 (Staging)
-docker exec -it redis-2 redis-cli
+# Access Redis-1 (Ingestion → Staging)
+docker exec -it redis-1 redis-cli -a crud
 
 # Check queue length
-LLEN crypto_info
+LLEN crypto_info_queue
 
 # Peek at queue items (without removing)
-LRANGE crypto_info 0 -1
+LRANGE crypto_info_queue 0 -1
 
 # Pop item from queue
-LPOP crypto_info
+LPOP crypto_info_queue
 ```
+
+---
 
 ## Key Considerations
 
@@ -442,8 +543,8 @@ Data persists across container restarts:
 - `./data/mongo`: MongoDB data files
 - `./data/postgres`: PostgreSQL data
 - `./metadata/airflow`: Airflow logs and metadata
-- `./shared_data`: Shared CSV files
-- `./offline`: Offline data cache
+- `./shared_data`: Shared unzipped CSV files between ingestion and staging zones
+- `./offline`: Offline data samples
 
 ### 7. **Airflow Executor**
 
@@ -475,17 +576,10 @@ Expected data volumes per run:
 
 - Incremental updates (only fetch new data)
 - Monitoring and alerting with Prometheus/Grafana
-- Other sources of data
+- Additional data sources integration
+- Enhanced data quality checks
 
-## Note for Students
-
-- Clone the created repository offline
-- Add your name and surname into the README file and your teammates as collaborators
-- Complete the field above after project is approved
-- Make any changes to your repository according to the specific assignment
-- Ensure code reproducibility and instructions on how to replicate the results
-- Add an open-source license, e.g., Apache 2.0
-- README is automatically converted into PDF
+---
 
 ## Troubleshooting
 
@@ -494,20 +588,23 @@ Expected data volumes per run:
 1. **Airflow services fail to start**:
 
    - Check system resources (minimum 4GB RAM, 2 CPUs)
-   - Verify `.env` file exists and is properly formatted
+   - Verify `.env` file exists: `ls -la .env`
+   - Ensure `.env` is properly formatted (no syntax errors)
    - Run `./runner.sh full_restart` to reset everything
 
 2. **"No such file or directory" errors**:
 
-   - Ensure all required directories exist
+   - Ensure `.env` file exists: `cp env.temp .env`
+   - Check all required directories exist
    - Check file permissions (especially on Linux)
-   - Verify `AIRFLOW_UID` matches your system user
+   - Verify `AIRFLOW_UID` in `.env` matches your system user ID: `echo $UID`
 
 3. **MongoDB connection refused**:
 
-   - Wait for MongoDB health check to pass (~30 seconds)
-   - Verify credentials in `.env` match MongoDB initialization
+   - Wait for MongoDB health check to pass (~30 seconds after startup)
+   - Verify credentials in `.env` match MongoDB configuration
    - Check MongoDB logs: `docker logs mongo`
+   - Ensure MongoDB container is running: `docker ps | grep mongo`
 
 4. **Tasks stuck in "queued" state**:
 
@@ -519,38 +616,223 @@ Expected data volumes per run:
    - Ensure offline data files exist in `./offline` directory
    - Verify file paths in `.env` match actual file locations
    - Check file permissions inside containers
+   - Check that your PC is disconnected from the internet
 
-## License
+### Need More Help?
 
-Apache License 2.0
+- Check Docker container logs: `docker logs <container-name>`
+- Review Airflow logs in : `/metadata/airflow/logs`
+- Ensure all prerequisites are met and `.env` file is properly configured
+
+---
 
 ## Datasets Description
 
 ### Yahoo Finance Data
 
+**Asset Categories**:
+
 - **Cryptocurrencies**: Bitcoin (BTC-USD), Ethereum (ETH-USD)
 - **Forex**: 23 major currency pairs (EUR/USD, GBP/USD, USD/JPY, etc.)
 - **Futures**: 37 commodity and index futures contracts
 - **Indices**: 40 global stock market indices (S&P 500, FTSE, DAX, etc.)
-- **Timeframe**: 20 years of monthly historical data
+
+**Data Coverage**:
+
+- **Timeframe**: 20 years of historical data
+- **Granularity**: Monthly intervals
+- **Data Points**: Price (Open, High, Low, Close), Volume, Dividends, Stock Splits
+
+**API**: [Yahoo Finance](https://finance.yahoo.com/) via `yfinance` Python library
 
 ### UCDP (Uppsala Conflict Data Program)
 
-- **Events Dataset**: Armed conflict events worldwide (1989-2024)
-- **Actors Dataset**: Conflict participants and organizations
-- **Georeference Dataset**: Geographic coordinates of conflict locations
-- **Source**: https://ucdp.uu.se/
+**Datasets**:
 
-## Queries
+1. **UCDP/PRIO Armed Conflict Dataset**: Information on armed conflicts (1989-2024)
+2. **UCDP Actor Dataset**: Details on conflict actors and organizations
+3. **UCDP Georeferenced Event Dataset**: Geographic coordinates of conflict events
 
-Example analytical queries enabled by this pipeline:
+**Coverage**:
 
-1. **Correlation Analysis**: How do geopolitical events correlate with market volatility?
-2. **Asset Performance**: Which asset classes perform best during conflict periods?
-3. **Geographic Impact**: How do regional conflicts affect local vs. global markets?
-4. **Trend Analysis**: Long-term price trends across different asset types
-5. **Event Clustering**: Identifying patterns in conflict events and market reactions
+- **Geographic**: Worldwide
+- **Temporal**: 1989 - 2024 (updated annually)
+- **Event Types**: State-based conflicts, non-state conflicts, one-sided violence
+
+**Source**: [Uppsala Conflict Data Program](https://ucdp.uu.se/)
+
+**License**: Free for academic use with proper attribution
 
 ---
 
-_Last Updated: January 2026_
+## Example Queries
+
+This pipeline enables sophisticated analytical queries that correlate geopolitical events with financial market behavior:
+
+### 1. Regional Market Response to Conflict Episode Onset
+
+**Objective**: Analyze how regional markets react to the start of conflict episodes by examining market values from 3 months before to 3 months after episode initiation.
+
+**Use Case**: Understand market volatility patterns when conflicts begin. For example, this query reveals how European indices (DAX, FTSE, CAC 40) responded to the onset of the Ukraine conflict in 2022, showing the immediate market impact and subsequent stabilization or decline.
+
+**Data Required**:
+
+- Conflict episode start dates and geographic regions
+- Regional market indices historical data (monthly granularity)
+- Time window: -3 months to +3 months from episode start
+
+**Example Application**: "How did European equity markets respond to the Ukraine conflict onset compared to Middle Eastern conflicts?"
+
+### 2. US Market Reaction Based on Maximum Involvement Role
+
+**Objective**: Measure how US markets react based on the United States' highest level of involvement in conflict episodes (primary vs. secondary actor).
+
+**Use Case**: When the US participates in multiple conflict episodes simultaneously with different roles, this query identifies the maximum involvement level (e.g., if the US is a primary actor in one episode and secondary in another, the primary role is used). This helps correlate market behavior with US foreign policy engagement intensity.
+
+**Data Required**:
+
+- US involvement classification (primary/secondary actor) per episode
+- US market indices (S&P 500, Dow Jones, NASDAQ)
+- Episode temporal boundaries
+
+**Example Application**: "Do US markets react differently when the US is a primary combatant versus a secondary supporter in armed conflicts?"
+
+### 3. S&P 500 Trend Analysis: New vs. Ongoing Episodes
+
+**Objective**: Identify S&P 500 price trends based on whether new conflict episodes are starting versus periods with only ongoing episodes or no active conflicts.
+
+**Use Case**: Determine if market trends differ when new geopolitical tensions emerge compared to the continuation of existing conflicts. This helps investors understand if markets price in conflict risk differently during escalation versus sustained conflict periods.
+
+**Data Required**:
+
+- Episode initiation dates and status (new/ongoing)
+- S&P 500 monthly close prices
+- Time-series aggregation of episode counts (new vs. ongoing)
+
+**Example Application**: "Does the S&P 500 exhibit bearish trends during months with new conflict episodes compared to months with only ongoing or no conflicts?"
+
+---
+
+### Query Execution
+
+These queries can be executed through:
+
+- **Streamlit Dashboard**: Interactive visualizations with parameter selection
+- **PostgreSQL Direct**: Custom SQL queries on the production schema for advanced analysis
+
+> **💡 Recommendation**: For the most comprehensive and reliable results, run the ingestion pipeline in **online mode** with an active internet connection. This ensures you have the latest financial data and conflict datasets, providing more accurate correlations and up-to-date insights. The offline mode is suitable for testing and demonstrations but may contain limited or outdated sample data.
+
+---
+
+## Licenses
+
+### Project License
+
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for details.
+
+### Third-Party Software Licenses
+
+This project uses the following open-source software:
+
+#### Core Infrastructure
+
+| Software                                      | License                           | Purpose                                           |
+| --------------------------------------------- | --------------------------------- | ------------------------------------------------- |
+| [Apache Airflow](https://airflow.apache.org/) | Apache 2.0                        | Workflow orchestration and scheduling             |
+| [PostgreSQL](https://www.postgresql.org/)     | PostgreSQL License                | Relational database for structured data           |
+| [MongoDB](https://www.mongodb.com/)           | SSPL (Server Side Public License) | Document database for raw data storage            |
+| [Redis](https://redis.io/)                    | BSD 3-Clause                      | In-memory data structure store and message broker |
+| [Docker](https://www.docker.com/)             | Apache 2.0                        | Containerization platform                         |
+
+#### Python Libraries
+
+| Library                                            | License      | Purpose                                     |
+| -------------------------------------------------- | ------------ | ------------------------------------------- |
+| [yfinance](https://github.com/ranaroussi/yfinance) | Apache 2.0   | Yahoo Finance data fetching                 |
+| [Streamlit](https://streamlit.io/)                 | Apache 2.0   | Web application framework for visualization |
+| [pandas](https://pandas.pydata.org/)               | BSD 3-Clause | Data manipulation and analysis              |
+| [pymongo](https://pymongo.readthedocs.io/)         | Apache 2.0   | MongoDB Python driver                       |
+| [psycopg2](https://www.psycopg.org/)               | LGPL v3      | PostgreSQL adapter for Python               |
+| [redis-py](https://github.com/redis/redis-py)      | MIT          | Redis Python client                         |
+| [celery](https://docs.celeryq.dev/)                | BSD 3-Clause | Distributed task queue                      |
+| [plotly](https://plotly.com/)                      | MIT          | Data visualisation                          |
+| [matplotlib](https://matplotlib.org/)              | Custom based on PSF | Data visualisation                   |
+
+#### Additional Tools
+
+| Tool                                                               | License                           | Purpose                             |
+| ------------------------------------------------------------------ | --------------------------------- | ----------------------------------- |
+| [pgAdmin](https://www.pgadmin.org/)                                | PostgreSQL License                | PostgreSQL administration interface |
+| [Redis Insight](https://redis.com/redis-enterprise/redis-insight/) | Server Side Public License (SSPL) | Redis GUI and analytics             |
+
+### Data Sources Licenses
+
+| Data Source   | License/Terms                                                                 | Attribution Required             |
+| ------------- | ----------------------------------------------------------------------------- | -------------------------------- |
+| Yahoo Finance | [Terms of Service](https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html) | Data for personal/academic use   |
+| UCDP Dataset  | [Creative Commons BY 4.0](https://creativecommons.org/licenses/by/4.0/)       | Yes - Academic citation required |
+
+**UCDP Citation**:
+
+```
+Pettersson, Therese & Magnus Öberg (2020) Organized violence, 1989-2024.
+Journal of Peace Research 57(4).
+Davies, Shawn, Therese Pettersson & Magnus Öberg (2025).
+Organized violence 1989-2024 and drone warfare.
+Journal of Peace Research 60(4).
+```
+
+### Compliance Notes
+
+- All third-party software is used in compliance with their respective licenses
+- This project does not modify the core functionality of Apache Airflow, PostgreSQL, MongoDB, or Redis
+- Yahoo Finance data is used for educational and non-commercial purposes only
+- UCDP data usage complies with their academic use policy and attribution requirements
+
+For commercial use of this pipeline, please review the licenses of all dependencies and ensure compliance with data source terms of service.
+
+---
+
+## Contributing
+
+We welcome contributions to improve this project! Here's how you can help:
+
+### How to Contribute
+
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/your-feature-name`
+3. **Make your changes** and test thoroughly
+4. **Commit your changes**: `git commit -m 'Add some feature'`
+5. **Push to the branch**: `git push origin feature/your-feature-name`
+6. **Open a Pull Request**
+
+### Guidelines
+
+- Follow existing code style and conventions
+- Add tests for new features
+- Update documentation (README, code comments) as needed
+- Ensure all services start and run correctly after your changes
+- Test both online and offline modes if modifying ingestion logic
+
+### Reporting Issues
+
+Found a bug or have a suggestion? Please open an issue on GitHub with:
+
+- Clear description of the problem or feature request
+- Steps to reproduce (for bugs)
+- Expected vs actual behavior
+- System information (OS, Docker version, etc.)
+
+---
+
+## Acknowledgments
+
+- **INSA Lyon** and **Prof. Riccardo Tommasini** for the Data Engineering course
+- **Yahoo Finance** for providing free financial data API
+- **Uppsala Conflict Data Program** for maintaining comprehensive conflict datasets
+- **Apache Software Foundation** for Airflow and other open-source tools
+- All contributors and open-source maintainers of the libraries used in this project
+
+---
+
+**Project Status**: Active Development | **Last Updated**: January 2026
