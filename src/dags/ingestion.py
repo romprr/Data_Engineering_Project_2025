@@ -119,7 +119,8 @@ staging_reagy = Dataset('redis://staging_data_ready')
     start_date=datetime.now() - timedelta(days=1), 
     description="The pipeline that will get the data from different sources and insert it into the Mongo database",
     catchup=False, 
-    tags=["ingestion"]
+    tags=["ingestion"],
+    max_active_tasks=10  # Limit concurrent tasks to prevent OOM
     )
 
 def ingestion_pipeline():
@@ -181,7 +182,7 @@ def ingestion_pipeline():
         print(f"Number of {asset_type} symbols found: {len(symbols)}")
         return symbols
 
-    @task
+    @task(pool="yfinance_pool", pool_slots=1)
     def query_yfinance_info(asset_type, symbols):
         """Query yfinance for asset information and store in MongoDB."""
         print(f"Fetching {asset_type} information...")
@@ -206,7 +207,7 @@ def ingestion_pipeline():
         print(f"Completed fetching {asset_type} information.")
         return metadatas
     
-    @task
+    @task(pool="yfinance_pool", pool_slots=1)
     def query_yfinance_history(asset_type, symbols):
         """Query yfinance for asset historical data and store in MongoDB."""
         print(f"Fetching {asset_type} historical data...")

@@ -143,6 +143,7 @@ The project implements a **Multi-Stage Architecture** pattern with three distinc
 #### Key Features:
 
 - **Chunked Processing**: Symbols processed in batches of 5 for parallel execution
+- **Pool-Based Concurrency Control**: Uses an Airflow pool (`yfinance_pool`) with 4 slots to limit concurrent Yahoo Finance API calls, preventing Out-Of-Memory (OOM) errors and avoiding API rate limiting or IP blocking
 - **Memory Management**: Explicit garbage collection after each symbol
 - **Idempotent Writes**: MongoDB upserts prevent duplicate data
 - **Airflow Dataset**: Signals staging layer when data is ready
@@ -398,6 +399,23 @@ After starting the services using `.env` and `runner.sh`, you need to configure 
 > POSTGRES_DB=stock
 > POSTGRES_HOST=postgres-db
 > ```
+
+#### Configuring Airflow Pool for Yahoo Finance API
+
+To prevent Out-Of-Memory (OOM) errors and avoid API rate limiting when querying Yahoo Finance, you need to create a pool that limits concurrent API calls:
+
+1. Navigate to **Airflow UI** at http://localhost:8080
+2. Login with credentials: **admin** / **admin**
+3. Click on **Admin** ⚙️ in the navigation bar
+4. Select **Pools** from the dropdown menu
+5. Click the **Add pool** button to add a new pool
+6. Configure the pool with the following settings:
+   - **Pool Name**: `yfinance_pool`
+   - **Slots**: `4`
+   - **Description**: `Limits concurrent Yahoo Finance API calls to prevent OOM and rate limiting`
+7. Click **Save**
+
+> **Note**: The pool restricts the number of simultaneous Yahoo Finance API queries to 4, balancing performance with memory usage and preventing server blocks. You can adjust the slots based on your system's available memory (2-3 for lower RAM, 5-6 for higher RAM).
 
 #### Running the Ingestion DAG
 
