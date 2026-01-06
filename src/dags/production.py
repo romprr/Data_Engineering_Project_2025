@@ -21,7 +21,7 @@ default_args = {
     "owner" : "niceJobTeam",
     "depends_on_past" : False,
     "retries" : 3,
-    "retry_delay" : timedelta(minutes=5),
+    "retry_delay": timedelta(seconds=5),
     "email_on_failure" : False
 }
 
@@ -120,7 +120,7 @@ def production_pipeline() :
 
     [load_conflict_info, load_asset_info] >> load_region >> load_dim_episodes
     [load_asset_info, load_date_dimension, load_region] >> load_asset_values
-    
+
     [load_dim_episodes, load_conflict_actors] >> load_sides
 
     [load_asset_values, load_sides, load_fact_monthly_country_status] >> end()
