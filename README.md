@@ -386,9 +386,37 @@ docker compose -f docker-compose.airflow.yml -f docker-compose.yml logs -f
 docker compose -f docker-compose.airflow.yml -f docker-compose.yml down
 ```
 
+#### Configuring Airflow PostgreSQL Connection
+
+After starting the services using `.env` and `runner.sh`, you need to configure the PostgreSQL connection in Airflow:
+
+1. Navigate to **Airflow UI** at http://localhost:8080
+2. Login with credentials: **admin** / **admin**
+3. Click on **Admin** ⚙️ in the navigation bar
+4. Select **Connections** from the dropdown menu
+5. Click the **Add a new connection** button
+6. Configure the connection with the following settings:
+   - **Connection Id**: `postgres`
+   - **Connection Type**: `Postgres`
+   - **Host**: `postgres-db`
+   - **Schema**: `stock`
+   - **Login**: `admin`
+   - **Password**: `admin`
+   - **Port**: `5432`
+7. Click **Save**
+
+> **Note**: These credentials match the values defined in your `.env` file:
+>
+> ```dotenv
+> POSTGRES_USER=admin
+> POSTGRES_PASSWORD=admin
+> POSTGRES_DB=stock
+> POSTGRES_HOST=postgres-db
+> ```
+
 #### Running the Ingestion DAG
 
-Once all services are running, trigger the data ingestion pipeline:
+Once all services are running and the PostgreSQL connection is configured, **unpause the three DAGs (toggle them to "On" if paused)** and then trigger the data ingestion pipeline:
 
 1. Navigate to **Airflow UI** at http://localhost:8080
 2. Login with credentials: **admin** / **admin**
