@@ -143,6 +143,7 @@ The project implements a **Multi-Stage Architecture** pattern with three distinc
 #### Key Features:
 
 - **Chunked Processing**: Symbols processed in batches of 5 for parallel execution
+- **Pool-Based Concurrency Control**: Uses an Airflow pool (`yfinance_pool`) with 4 slots to limit concurrent Yahoo Finance API calls, preventing Out-Of-Memory (OOM) errors and avoiding API rate limiting or IP blocking
 - **Memory Management**: Explicit garbage collection after each symbol
 - **Idempotent Writes**: MongoDB upserts prevent duplicate data
 - **Airflow Dataset**: Signals staging layer when data is ready
@@ -319,21 +320,6 @@ REDIS_1_PASSWORD=crud
 
 -> For production deployments, you should change the credentials of the Databases AND Airflow.
 
-**⚠️ Airflow Warning**
-
-If you have problem with Airflow not showing DAGs, you might want to consider changing the ``AIRFLOW_UID`` to your user and restart the project.
-
-Get your user id : 
-```bash
-id -u
-```
-
-Run a full restart: 
-```bash
-sudo ./runner.sh full_restart
-```
-
-
 ### Running the Pipeline
 
 The project includes a helper script [`runner.sh`](runner.sh) for common operations:
@@ -369,7 +355,7 @@ The project includes a helper script [`runner.sh`](runner.sh) for common operati
    ./runner.sh full_restart
    ```
    ⚠️ **Warning**: This deletes all volumes, logs, and data!  
-   -> This command might require ``sudo`` to work.
+   -> This command might require `sudo` to work.
 
 ### Manual Docker Compose Commands
 
@@ -386,19 +372,56 @@ docker compose -f docker-compose.airflow.yml -f docker-compose.yml logs -f
 docker compose -f docker-compose.airflow.yml -f docker-compose.yml down
 ```
 
-#### Running the Ingestion DAG
+#### Configuring Airflow PostgreSQL Connection
 
-Once all services are running, trigger the data ingestion pipeline:
+After starting the services using `.env` and `runner.sh`, you need to configure the PostgreSQL connection in Airflow:
 
 1. Navigate to **Airflow UI** at http://localhost:8080
 2. Login with credentials: **admin** / **admin**
-3. Add the Postgres connection, with the Postgres credentials in your ``.env`` file, and ``postgres`` as connection id and ``postgres-db`` as host.
-4. Find the DAG named `ingestion_pipeline`
-5. Toggle the DAG to **"On"** (if paused)
-6. Click the **"Play"** button → **"Trigger DAG"**
-7. Monitor progress in the **Grid** or **Graph** view
+3. Click on **Admin** ⚙️ in the navigation bar
+4. Select **Connections** from the dropdown menu
+5. Click the **Add a new connection** button
+6. Configure the connection with the following settings:
+   - **Connection Id**: `postgres`
+   - **Connection Type**: `Postgres`
+   - **Host**: `postgres-db`
+   - **Database**: `stock`
+   - **Login**: `admin`
+   - **Password**: `admin`
+   - **Port**: `5432`
+7. Click **Save**
 
-> **Note**: To run the pipeline in offline mode, please turn off the wifi connection on your pc, if you do, you need to be connected to internet to add the Postgres connection first, once the connection is made you can turn off your internet.
+> **Note**: These credentials match the values defined in your `.env` file:
+>
+> ```dotenv
+> POSTGRES_USER=admin
+> POSTGRES_PASSWORD=admin
+> POSTGRES_DB=stock
+> POSTGRES_HOST=postgres-db
+> ```
+
+#### Configuring Airflow Pool for Yahoo Finance API
+
+To prevent Out-Of-Memory (OOM) errors and avoid API rate limiting when querying Yahoo Finance, you need to create a pool that limits concurrent API calls:
+
+1. Navigate to **Airflow UI** at http://localhost:8080
+2. Login with credentials: **admin** / **admin**
+3. Click on **Admin** ⚙️ in the navigation bar
+4. Select **Pools** from the dropdown menu
+5. Click the **Add pool** button to add a new pool
+6. Configure the pool with the following settings:
+   - **Pool Name**: `yfinance_pool`
+   - **Slots**: `4`
+   - **Description**: `Limits concurrent Yahoo Finance API calls to prevent OOM and rate limiting`
+7. Click **Save**
+
+> **Note**: The pool restricts the number of simultaneous Yahoo Finance API queries to 4, balancing performance with memory usage and preventing server blocks. You can adjust the slots based on your system's available memory (2-3 for lower RAM, 5-6 for higher RAM).
+
+#### Running the Ingestion DAG
+
+Once all services are running and the PostgreSQL connection is configured, on Airflow UI, **unpause the three DAGs (toggle them to "On" if paused)** and then trigger the ingestion_pipeline.
+
+> **Note**: To run the pipeline in offline mode, please turn off the wifi connection on your pc **after** creating the postgres connection.
 
 The pipeline will automatically:
 
@@ -613,10 +636,27 @@ Expected data volumes per run:
    - Restart Airflow: `./runner.sh restart`
 
 5. **Offline mode not working**:
+
    - Ensure offline data files exist in `./offline` directory
    - Verify file paths in `.env` match actual file locations
    - Check file permissions inside containers
    - Check that your PC is disconnected from the internet
+
+6. **Airflow DAGs not showing**:
+
+   If you have problems with Airflow not showing DAGs, you might want to consider changing the `AIRFLOW_UID` to your user ID and restart the project.
+
+   **Get your user ID**:
+
+   ```bash
+   id -u
+   ```
+
+   Update `AIRFLOW_UID` in your `.env` file with the returned value, then run a full restart:
+
+   ```bash
+   sudo ./runner.sh full_restart
+   ```
 
 ### Need More Help?
 
@@ -746,17 +786,17 @@ This project uses the following open-source software:
 
 #### Python Libraries
 
-| Library                                            | License      | Purpose                                     |
-| -------------------------------------------------- | ------------ | ------------------------------------------- |
-| [yfinance](https://github.com/ranaroussi/yfinance) | Apache 2.0   | Yahoo Finance data fetching                 |
-| [Streamlit](https://streamlit.io/)                 | Apache 2.0   | Web application framework for visualization |
-| [pandas](https://pandas.pydata.org/)               | BSD 3-Clause | Data manipulation and analysis              |
-| [pymongo](https://pymongo.readthedocs.io/)         | Apache 2.0   | MongoDB Python driver                       |
-| [psycopg2](https://www.psycopg.org/)               | LGPL v3      | PostgreSQL adapter for Python               |
-| [redis-py](https://github.com/redis/redis-py)      | MIT          | Redis Python client                         |
-| [celery](https://docs.celeryq.dev/)                | BSD 3-Clause | Distributed task queue                      |
-| [plotly](https://plotly.com/)                      | MIT          | Data visualisation                          |
-| [matplotlib](https://matplotlib.org/)              | Custom based on PSF | Data visualisation                   |
+| Library                                            | License             | Purpose                                     |
+| -------------------------------------------------- | ------------------- | ------------------------------------------- |
+| [yfinance](https://github.com/ranaroussi/yfinance) | Apache 2.0          | Yahoo Finance data fetching                 |
+| [Streamlit](https://streamlit.io/)                 | Apache 2.0          | Web application framework for visualization |
+| [pandas](https://pandas.pydata.org/)               | BSD 3-Clause        | Data manipulation and analysis              |
+| [pymongo](https://pymongo.readthedocs.io/)         | Apache 2.0          | MongoDB Python driver                       |
+| [psycopg2](https://www.psycopg.org/)               | LGPL v3             | PostgreSQL adapter for Python               |
+| [redis-py](https://github.com/redis/redis-py)      | MIT                 | Redis Python client                         |
+| [celery](https://docs.celeryq.dev/)                | BSD 3-Clause        | Distributed task queue                      |
+| [plotly](https://plotly.com/)                      | MIT                 | Data visualisation                          |
+| [matplotlib](https://matplotlib.org/)              | Custom based on PSF | Data visualisation                          |
 
 #### Additional Tools
 
